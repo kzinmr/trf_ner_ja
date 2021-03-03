@@ -38,16 +38,18 @@ class LabelTokenAligner:
             self.ids_to_label[i] = l
 
     @staticmethod
-    def get_ids_to_label(labels_path: str, bilou:bool=True) -> Dict[int, str]:
+    def get_ids_to_label(labels_path: str, bilou: bool = True) -> Dict[int, str]:
         with open(labels_path, "r") as f:
             labels = [l for l in f.read().splitlines() if l and l != "O"]
         if bilou:
             ids_to_label = {
-                i: f"{s}-{label}" for i, (label, s) in enumerate(product(labels, "BILU"), 1)
+                i: f"{s}-{label}"
+                for i, (label, s) in enumerate(product(labels, "BILU"), 1)
             }
         else:
             ids_to_label = {
-                i: f"{s}-{label}" for i, (label, s) in enumerate(product(labels, "BI"), 1)
+                i: f"{s}-{label}"
+                for i, (label, s) in enumerate(product(labels, "BI"), 1)
             }
         ids_to_label[0] = "O"
         return ids_to_label

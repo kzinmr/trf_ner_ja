@@ -120,7 +120,9 @@ def main_as_plmodule():
         print(f"Start training...")
         dm.setup(stage="fit")
         # make pl module
-        model = TokenClassificationModule(args, bilou=dm.bilou, use_datasets=dm.use_datasets)
+        model = TokenClassificationModule(
+            args, bilou=dm.bilou, use_datasets=dm.use_datasets
+        )
         # make trainer with callbacks
         checkpoint_callback = ModelCheckpoint(
             dirpath=args.output_dir,

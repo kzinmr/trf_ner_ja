@@ -6,7 +6,9 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 from seqeval.metrics import accuracy_score
-from seqeval.metrics.v1 import precision_recall_fscore_support
+from seqeval.metrics.sequence_labeling import precision_recall_fscore_support
+from seqeval.metrics.v1 import \
+    precision_recall_fscore_support as precision_recall_fscore_support_v1
 from seqeval.scheme import BILOU
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import (
@@ -32,7 +34,14 @@ class TokenClassificationModule(pl.LightningModule):
     Initialize a model and config for token-classification
     """
 
-    def __init__(self, hparams: Union[Dict, argparse.Namespace]):
+    def __init__(
+        self,
+        hparams: Union[Dict, argparse.Namespace],
+        bilou: bool = True,
+        use_datasets: bool = False,
+    ):
+        self.bilou = bilou
+        self.use_datasets = use_datasets
         # NOTE: internal code may pass hparams as dict **kwargs
         if isinstance(hparams, Dict):
             hparams = argparse.Namespace(**hparams)
@@ -53,7 +62,9 @@ class TokenClassificationModule(pl.LightningModule):
         self.tokenzier = custom_tokenizer_from_pretrained(
             tokenizer_path, cache_dir=self.cache_dir
         )
-        self.label_ids_to_label = LabelTokenAligner.get_ids_to_label(hparams.labels)
+        self.label_ids_to_label = LabelTokenAligner.get_ids_to_label(
+            hparams.labels, self.bilou
+        )
         num_labels = len(self.label_ids_to_label)
         # config
         config_path = (
@@ -149,9 +160,14 @@ class TokenClassificationModule(pl.LightningModule):
             target_list.extend(golds_batch)
             preds_list.extend(preds_batch)
         accuracy = accuracy_score(target_list, preds_list)
-        precision, recall, f1, support = precision_recall_fscore_support(
-            target_list, preds_list, scheme=BILOU, average="micro"
-        )
+        if self.bilou:
+            precision, recall, f1, support = precision_recall_fscore_support_v1(
+                target_list, preds_list, scheme=BILOU, average="micro"
+            )
+        else:
+            precision, recall, f1, support = precision_recall_fscore_support(
+                target_list, preds_list, average="micro"
+            )
         return accuracy, precision, recall, f1, support
 
     def log_prf(self, p, r, f, output_file):
@@ -189,18 +205,27 @@ class TokenClassificationModule(pl.LightningModule):
         }
 
     def training_step(self, train_batch, batch_idx) -> Dict[str, torch.Tensor]:
-        output = self.forward(
-            input_ids=train_batch.input_ids.to(self.device),
-            attention_mask=train_batch.attention_mask.to(self.device),
-            labels=train_batch.label_ids.to(self.device),
-        )
+        if self.use_datasets:
+            output = self.forward(
+                input_ids=train_batch["input_ids"].to(self.device),
+                attention_mask=train_batch["attention_mask"].to(self.device),
+                labels=train_batch["labels"].to(self.device),
+            )
+            targets = train_batch["labels"]
+        else:
+            output = self.forward(
+                input_ids=train_batch.input_ids.to(self.device),
+                attention_mask=train_batch.attention_mask.to(self.device),
+                labels=train_batch.label_ids.to(self.device),
+            )
+            targets = train_batch.label_ids
         loss = output.loss
         self.log("train_loss", loss, prog_bar=True)
         if self.hparams.monitor_training:
             return {
                 "loss": loss,
                 "prediction": output.logits,
-                "target": train_batch.label_ids,
+                "target": targets,
             }
         else:
             return {"loss": loss}
@@ -218,11 +243,21 @@ class TokenClassificationModule(pl.LightningModule):
     def validation_step(self, val_batch, batch_idx) -> Dict[str, torch.Tensor]:
         # print(val_batch.input_ids.shape)
         # print(val_batch.label_ids.shape)
-        output = self.forward(
-            input_ids=val_batch.input_ids.to(self.device),
-            attention_mask=val_batch.attention_mask.to(self.device),
-            labels=val_batch.label_ids.to(self.device),
-        )
+        if self.use_datasets:
+            output = self.forward(
+                input_ids=val_batch["input_ids"].to(self.device),
+                attention_mask=val_batch["attention_mask"].to(self.device),
+                labels=val_batch["labels"].to(self.device),
+            )
+            targets = val_batch["labels"]
+        else:
+            output = self.forward(
+                input_ids=val_batch.input_ids.to(self.device),
+                attention_mask=val_batch.attention_mask.to(self.device),
+                labels=val_batch.label_ids.to(self.device),
+            )
+            targets = val_batch.label_ids
+
         if self.hparams.monitor == "loss":
             return {
                 "val_step_loss": output.loss,
@@ -231,7 +266,7 @@ class TokenClassificationModule(pl.LightningModule):
             return {
                 "val_step_loss": output.loss,
                 "prediction": output.logits,
-                "target": val_batch.label_ids,
+                "target": targets,
             }
 
     def validation_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]):
@@ -248,12 +283,22 @@ class TokenClassificationModule(pl.LightningModule):
             self.log("val_support", support)
 
     def test_step(self, test_batch, batch_idx) -> Dict[str, torch.Tensor]:
-        output = self.forward(
-            input_ids=test_batch.input_ids.to(self.device),
-            attention_mask=test_batch.attention_mask.to(self.device),
-            labels=test_batch.label_ids.to(self.device),
-        )
-        return {"target": test_batch.label_ids, "prediction": output.logits}
+        if self.use_datasets:
+            output = self.forward(
+                input_ids=test_batch["input_ids"].to(self.device),
+                attention_mask=test_batch["attention_mask"].to(self.device),
+                labels=test_batch["labels"].to(self.device),
+            )
+            targets = test_batch["labels"]
+        else:
+            output = self.forward(
+                input_ids=test_batch.input_ids.to(self.device),
+                attention_mask=test_batch.attention_mask.to(self.device),
+                labels=test_batch.label_ids.to(self.device),
+            )
+            targets = test_batch.label_ids
+
+        return {"target": targets, "prediction": output.logits}
 
     def test_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]):
         accuracy, precision, recall, f1, support = self.eval_f1(outputs)
