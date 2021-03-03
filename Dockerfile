@@ -39,9 +39,13 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 #     pip install hydra-core --upgrade
 
-COPY *.py /app/
-COPY *.sh /app/
+
+COPY run.sh /app/run.sh
 # COPY config.yaml .
+COPY data.py /app/data.py
+COPY pl_vocabulary_trf.py /app/pl_vocabulary_trf.py
+COPY pl_main.py /app/pl_main.py
 COPY pl_module_trf.py /app/pl_module_trf.py
+COPY pl_datamodule_trf.py /app/pl_datamodule_trf.py
 
 CMD ["bash", "/app/run.sh"]
