@@ -1,0 +1,12 @@
+pytorch_lightning==1.1.0
+transformers==4.0.1
+tokenizers==0.10.0
+scikit-learn==0.23.2
+seqeval==1.2.2
+sklearn_crfsuite==0.3.6
+pytextspan==0.5.2
+jsonlines==2.0.0
+regex
+mecab-python3
+fugashi
+ipadic
