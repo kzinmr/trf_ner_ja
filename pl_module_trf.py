@@ -45,8 +45,13 @@ class TokenClassificationModule(pl.LightningModule):
         if self.cache_dir is not None and not os.path.exists(self.hparams.cache_dir):
             os.mkdir(self.cache_dir)
         # tokenizer & label-aligner
+        tokenizer_path = (
+            hparams.model_name_or_path
+            if hparams.tokenizer_path is None
+            else hparams.tokenizer_path
+        )
         self.tokenzier = custom_tokenizer_from_pretrained(
-            self.hparams.model_name_or_path, cache_dir=self.cache_dir
+            tokenizer_path, cache_dir=self.cache_dir
         )
         self.label_ids_to_label = LabelTokenAligner.get_ids_to_label(hparams.labels)
         num_labels = len(self.label_ids_to_label)
@@ -58,7 +63,7 @@ class TokenClassificationModule(pl.LightningModule):
         )
         self.config: PretrainedConfig = AutoConfig.from_pretrained(
             config_path,
-            **({"num_labels": num_labels} if num_labels is not None else {}),
+            **({"num_labels": num_labels}),
             cache_dir=self.cache_dir,
         )
         extra_model_params = (
@@ -71,12 +76,12 @@ class TokenClassificationModule(pl.LightningModule):
             if getattr(self.hparams, p, None) and hasattr(self.config, p):
                 setattr(self.config, p, getattr(self.hparams, p, None))
         # model
-        model_name_or_path = hparams.model_name_or_path
+        model_checkpoint = hparams.model_name_or_path
         self.model: PreTrainedModel = AutoModelForTokenClassification.from_pretrained(
-            model_name_or_path,
-            from_tf=bool(".ckpt" in model_name_or_path),
+            model_checkpoint,
             config=self.config,
             cache_dir=self.cache_dir,
+            from_tf=bool(".ckpt" in model_checkpoint),
         )
         if self.hparams.freeze_pretrained:
             for name, param in self.model.named_parameters():
@@ -99,9 +104,13 @@ class TokenClassificationModule(pl.LightningModule):
                 fp.write("PRECISION,RECALL,F1")
                 fp.write("\n")
 
+            # self.model.train()
+
     def forward(self, input_ids, attention_mask, labels) -> TokenClassifierOutput:
         """BertForTokenClassification.forward"""
-        return self.model(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+        return self.model(
+            input_ids=input_ids, attention_mask=attention_mask, labels=labels
+        )
 
     def convert_labels_pair(self, label_ids_batch, logits_batch):
         label_ids_batch = label_ids_batch.detach().cpu().numpy()
@@ -124,7 +133,9 @@ class TokenClassificationModule(pl.LightningModule):
             for label_ids in np.argmax(logits_batch, axis=2)
         ]
 
-        preds_batch = [labels[:len(golds)]  for golds, labels in zip(golds_batch, preds_batch)]
+        preds_batch = [
+            labels[: len(golds)] for golds, labels in zip(golds_batch, preds_batch)
+        ]
 
         return golds_batch, preds_batch
 
@@ -253,8 +264,54 @@ class TokenClassificationModule(pl.LightningModule):
         self.log("test_f1", f1)
         self.log("test_support", support)
 
+    @staticmethod
+    def get_linear_schedule_with_warmup(
+        optimizer, num_warmup_steps, num_training_steps, last_epoch=-1
+    ):
+        """
+        Create a schedule with a learning rate that decreases linearly from the initial lr set in the optimizer to 0, after
+        a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
+
+        Args:
+            optimizer (:class:`~torch.optim.Optimizer`):
+                The optimizer for which to schedule the learning rate.
+            num_warmup_steps (:obj:`int`):
+                The number of steps for the warmup phase.
+            num_training_steps (:obj:`int`):
+                The total number of training steps.
+            last_epoch (:obj:`int`, `optional`, defaults to -1):
+                The index of the last epoch when resuming training.
+
+        Return:
+            :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+        """
+
+        def lr_lambda(current_step: int):
+            if current_step < num_warmup_steps:
+                return float(current_step) / float(max(1, num_warmup_steps))
+            return max(
+                0.0,
+                float(num_training_steps - current_step)
+                / float(max(1, num_training_steps - num_warmup_steps)),
+            )
+
+        return torch.optim.lr_scheduler.LambdaLR(
+            optimizer,
+            lr_lambda,
+            last_epoch,
+        )
+
     def configure_optimizers(self):
-        """Prepare optimizer and schedule (linear warmup and decay)"""
+        """Prepare optimizer and scheduler (linear warmup and decay)"""
+
+        adafactor = False
+        adam_beta1 = 0.9
+        adam_beta2 = 0.999
+        adam_epsilon = 1e-8
+
+        lr_scheduler = "linear"
+        warmup_steps = 0
+
         no_decay = ["bias", "LayerNorm.weight"]
         optimizer_grouped_parameters = [
             {
@@ -275,27 +332,39 @@ class TokenClassificationModule(pl.LightningModule):
             },
         ]
 
-        optimizer = torch.optim.AdamW(
-            optimizer_grouped_parameters,
-            lr=self.hparams.learning_rate,
-            eps=self.hparams.adam_epsilon,
-            betas=(0.9, 0.999),
-            weight_decay=self.hparams.weight_decay,
-            # amsgrad=False,
-        )
-        lr_scheduler = ReduceLROnPlateau(
-            optimizer,
-            mode="min" if self.hparams.monitor == "loss" else "max",
-            factor=self.hparams.anneal_factor,
-            patience=self.hparams.patience,
-            min_lr=1e-5,
-            verbose=True,
-        )
-        scheduler = {
-            "scheduler": lr_scheduler,
-            "monitor": "val_loss" if self.hparams.monitor == "loss" else "val_f1",
-        }
-        return [optimizer], [scheduler]
+        if adafactor:
+            optimizer_cls = torch.optim.Adafactor
+            optimizer_kwargs = {"scale_parameter": False, "relative_step": False}
+        else:
+            optimizer_cls = torch.optim.AdamW
+            optimizer_kwargs = {
+                "betas": (adam_beta1, adam_beta2),
+                "eps": adam_epsilon,
+            }
+        optimizer_kwargs["lr"] = self.hparams.learning_rate
+        self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
+
+        if lr_scheduler == "linear":
+            self.lr_scheduler = self.get_linear_schedule_with_warmup(
+                self.optimizer,
+                num_warmup_steps=warmup_steps,
+                num_training_steps=self.hparams.max_epochs,
+            )
+            return [self.optimizer], [self.lr_scheduler]
+        else:
+            self.lr_scheduler = ReduceLROnPlateau(
+                self.optimizer,
+                mode="min" if self.hparams.monitor == "loss" else "max",
+                factor=self.hparams.anneal_factor,
+                patience=self.hparams.patience,
+                min_lr=1e-5,
+                verbose=True,
+            )
+            return {
+                "optimizer": self.optimizer,
+                "lr_scheduler": self.lr_scheduler,
+                "monitor": "val_loss" if self.hparams.monitor == "loss" else "val_f1",
+            }
 
     @staticmethod
     def add_model_specific_args(parent_parser):
