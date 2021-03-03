@@ -197,6 +197,7 @@ class TokenClassificationModule(pl.LightningModule):
     def training_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]):
         if self.hparams.monitor_training:
             accuracy, precision, recall, f1, support = self.eval_f1(outputs)
+            self.log_prf(precision, recall, f1, self.train_loss_log)
             self.log("train_accuracy", accuracy)
             self.log("train_precision", precision)
             self.log("train_recall", recall)
@@ -228,6 +229,7 @@ class TokenClassificationModule(pl.LightningModule):
             self.log("val_loss", avg_loss, sync_dist=True)
         else:
             accuracy, precision, recall, f1, support = self.eval_f1(outputs)
+            self.log_prf(precision, recall, f1, self.dev_loss_log)
             self.log("val_accuracy", accuracy)
             self.log("val_precision", precision)
             self.log("val_recall", recall)
@@ -244,6 +246,7 @@ class TokenClassificationModule(pl.LightningModule):
 
     def test_epoch_end(self, outputs: List[Dict[str, torch.Tensor]]):
         accuracy, precision, recall, f1, support = self.eval_f1(outputs)
+        self.log_prf(precision, recall, f1, self.test_loss_log)
         self.log("test_accuracy", accuracy)
         self.log("test_precision", precision)
         self.log("test_recall", recall)
