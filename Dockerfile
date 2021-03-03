@@ -42,5 +42,6 @@ RUN pip install -r requirements.txt
 COPY *.py /app/
 COPY *.sh /app/
 # COPY config.yaml .
+COPY pl_module_trf.py /app/pl_module_trf.py
 
 CMD ["bash", "/app/run.sh"]

@@ -11,12 +11,173 @@ import torch
 from tokenizers import Encoding
 from torch.utils.data import DataLoader, Dataset
 from transformers import BatchEncoding, PreTrainedTokenizerFast
+from transformers import DataCollatorForTokenClassification
 
 from data import *
 from pl_vocabulary_trf import (
     LabelTokenAligner,
     custom_tokenizer_from_pretrained,
 )
+
+from datasets import load_dataset, load_metric
+
+class NoLocalFileError(Exception):
+    pass
+
+
+class MyDataset(Dataset):
+    def __init__(
+        self,
+        features: List[InputFeatures],
+    ):
+        self.features = features
+        self._n_features = len(self.features)
+
+    def __len__(self):
+        return self._n_features
+
+    def __getitem__(self, idx) -> InputFeatures:
+        return self.features[idx]    
+
+class CoNLL2003TokenClassificationFeatures:
+    """
+    Build feature dataset so that the model can load
+    """
+
+    def __init__(
+        self,
+
+        tokenizer: PreTrainedTokenizerFast,
+        tokens_per_batch: int = 32,
+        window_stride: Optional[int] = None,
+        label_all_tokens=True,
+    ):
+        """tokenize_and_align_labels with long text (i.e. truncation is disabled)"""
+
+        self.tokenizer = tokenizer
+        self.label_all_tokens = label_all_tokens
+        
+        if window_stride is None or window_stride <= 0:
+            self.window_stride = tokens_per_batch
+        elif window_stride > 0 and window_stride < tokens_per_batch:
+            self.window_stride = window_stride
+        self.tokens_per_batch = tokens_per_batch
+
+        # self.features: List[InputFeatures] = []
+        # self.examples: List[TokenClassificationExample] = []
+
+        datasets = load_dataset("conll2003")
+        # input_ids, attention_mask
+        tokenized_datasets = datasets.map(self.tokenize_and_align_labels, batched=True)
+        # input_ids, attention_mask, label_ids
+        # ['attention_mask', 'chunk_tags', 'id', 'input_ids', 'labels', 'ner_tags', 'pos_tags', 'token_type_ids', 'tokens']
+        self.train_datasets = [{k:d[k] for k in ['attention_mask', 'input_ids', 'labels',]} 
+        for d in tokenized_datasets["train"]]
+        self.val_datasets = [{k:d[k] for k in ['attention_mask', 'input_ids', 'labels',]} 
+        for d in tokenized_datasets["validation"]]
+        self.test_datasets = [{k:d[k] for k in ['attention_mask', 'input_ids', 'labels',]} 
+        for d in tokenized_datasets["test"]]
+
+        self.train_features = [
+            InputFeatures(
+                input_ids=dataset["input_ids"],
+                attention_mask=dataset["attention_mask"],
+                label_ids=dataset["labels"],
+            )
+            for dataset in tokenized_datasets["train"]
+        ]
+        self.val_features = [
+            InputFeatures(
+                input_ids=dataset["input_ids"],
+                attention_mask=dataset["attention_mask"],
+                label_ids=dataset["labels"],
+            )
+            for dataset in tokenized_datasets["validation"]
+        ]
+        self.test_features = [
+            InputFeatures(
+                input_ids=dataset["input_ids"],
+                attention_mask=dataset["attention_mask"],
+                label_ids=dataset["labels"],
+            )
+            for dataset in tokenized_datasets["test"]
+        ]
+
+        self.label_list = datasets["train"].features["ner_tags"].feature.names
+
+    def tokenize_and_align_labels(self, examples):
+        """
+        >> datasets = load_dataset("conll2003")
+        >> tokenized_datasets = datasets.map(tokenize_and_align_labels, batched=True)
+
+        example = datasets["train"][0]  # input_ids, attention_mask
+        tokenized_input = tokenizer(example["tokens"], is_split_into_words=True)
+        # len(example["ner_tags"]) != len(tokenized_input["input_ids"])
+        word_ids = tokenized_input.word_ids()
+        aligned_labels = [PAD_TOKEN_LABEL_ID if i is None else example["ner_tags"][i] for i in word_ids]
+        assert len(aligned_labels) == len(tokenized_input["input_ids"])
+        """
+        tokenized_inputs = self.tokenizer(examples["tokens"], truncation=True, is_split_into_words=True)
+
+        label_ids_list: IntListList = []
+        for i, tags in enumerate(examples["ner_tags"]):
+            word_ids = tokenized_inputs.word_ids(batch_index=i)
+            previous_word_idx = None
+            label_ids: IntList = []
+            for word_idx in word_ids:
+                # Special tokens have a word id that is None. We set the label to -100 so they are automatically
+                # ignored in the loss function.
+                if word_idx is None:
+                    label_ids.append(-100)
+                # We set the label for the first token of each word.
+                elif word_idx != previous_word_idx:
+                    label_ids.append(tags[word_idx])
+                # For the other tokens in a word, we set the label to either the current label or -100,
+                # depending on the label_all_tokens flag.
+                else:
+                    label_ids.append(tags[word_idx] if self.label_all_tokens else -100)
+                previous_word_idx = word_idx
+
+            label_ids_list.append(label_ids)
+
+        tokenized_inputs["labels"] = label_ids_list
+        return tokenized_inputs
+
+    @staticmethod
+    def bio2biolu(labels: StrList) -> StrList:
+        """ TODO: label2label_id for datasets
+        """
+        new_labels = []
+        n_lines = len(labels)
+        for i, current_label in enumerate(labels):
+            next_iob = None
+            if i < n_lines - 1:
+                next_label = labels[i + 1]
+                next_iob = next_label[0]
+
+            tag_type = current_label[2:]
+            iob = current_label[0]
+
+            iob_transition = (iob, next_iob)
+            current_iob = iob
+            if iob_transition == ("B", "I"):
+                current_iob = "B"
+            elif iob_transition == ("I", "I"):
+                current_iob = "I"
+            elif iob_transition in {("B", "O"), ("B", "B"), ("B", None)}:
+                current_iob = "U"
+            elif iob_transition in {("I", "B"), ("I", "O"), ("I", None)}:
+                current_iob = "L"
+            elif iob == "O":
+                current_iob = "O"
+            else:
+                print(f"Invalid BIO transition: {iob_transition}")
+                if iob not in set("BIOLU"):
+                    current_iob = "O"
+            biolu = f"{current_iob}-{tag_type}" if current_iob != "O" else "O"
+
+            new_labels.append(biolu)
+        return new_labels
 
 
 class ExamplesBuilder:
@@ -36,8 +197,14 @@ class ExamplesBuilder:
         elif (datadir_p / f"{split.value}.jsonl").exists():
             self.examples = self.read_span_examples(data_dir, split)
         else:
+            raise NoLocalFileError
             # download_dataset(data_dir)
-            pass
+            # datasets = load_dataset("conll2003")
+            # self.examples = datasets[split.value if split.value != "dev" else "validation"]
+
+        # print(f"0-th sentence length: {len(self.examples[0].content)}")
+        # print(self.examples[0].content[:10])
+        # print(self.examples[0].annotations)
 
     @staticmethod
     def download_dataset(data_dir: Union[str, Path]):
@@ -245,11 +412,12 @@ class TokenClassificationDataset(Dataset):
 
     def __init__(
         self,
-        examples: List[StringSpanExample],
+        examples: List,  #[StringSpanExample],
         tokenizer: PreTrainedTokenizerFast,
         label_token_aligner: LabelTokenAligner,
         tokens_per_batch: int = 32,
         window_stride: Optional[int] = None,
+        label_all_tokens=True,
     ):
         """tokenize_and_align_labels with long text (i.e. truncation is disabled)"""
 
@@ -258,6 +426,9 @@ class TokenClassificationDataset(Dataset):
         elif window_stride > 0 and window_stride < tokens_per_batch:
             self.window_stride = window_stride
         self.tokens_per_batch = tokens_per_batch
+
+        self.features: List[InputFeatures] = []
+        self.examples: List[TokenClassificationExample] = []
 
         # tokenize text into subwords
         texts: StrList = [ex.content for ex in examples]
@@ -275,8 +446,6 @@ class TokenClassificationDataset(Dataset):
 
         # perform manual padding and register features
         # TODO: padding using Encoding
-        self.features: List[InputFeatures] = []
-        self.examples: List[TokenClassificationExample] = []
         guids: StrList = [ex.guid for ex in examples]
         for guid, encoding, label_ids in zip(guids, encodings, aligned_label_ids):
             seq_length = len(label_ids)
@@ -349,13 +518,13 @@ class TokenClassificationDataModule(pl.LightningDataModule):
 
     def __init__(self, hparams: Namespace):
         self.tokenizer: PreTrainedTokenizerFast
-        self.label_token_aligner: LabelTokenAligner
-        self.train_examples: List[StringSpanExample]
-        self.val_examples: List[StringSpanExample]
-        self.test_examples: List[StringSpanExample]
         self.train_dataset: TokenClassificationDataset
         self.val_dataset: TokenClassificationDataset
         self.test_dataset: TokenClassificationDataset
+        # self.label_token_aligner: LabelTokenAligner
+        # self.train_examples: List[StringSpanExample]
+        # self.val_examples: List[StringSpanExample]
+        # self.test_examples: List[StringSpanExample]
 
         super().__init__()
 
@@ -363,8 +532,8 @@ class TokenClassificationDataModule(pl.LightningDataModule):
         if self.cache_dir is not None and not os.path.exists(self.cache_dir):
             os.mkdir(self.cache_dir)
         self.data_dir = hparams.data_dir
-        if not os.path.exists(self.data_dir):
-            os.mkdir(self.data_dir)
+        # if not os.path.exists(self.data_dir):
+        #     os.mkdir(self.data_dir)
 
         self.tokenizer_name_or_path = (
             hparams.tokenizer_path
@@ -388,60 +557,82 @@ class TokenClassificationDataModule(pl.LightningDataModule):
         """
         Downloads the data and prepare the tokenizer
         """
-
-        self.train_examples = ExamplesBuilder(
-            self.data_dir,
-            Split.train,
-            delimiter=self.delimiter,
-            is_bio=self.is_bio,
-        ).examples
-        self.val_examples = ExamplesBuilder(
-            self.data_dir,
-            Split.dev,
-            delimiter=self.delimiter,
-            is_bio=self.is_bio,
-        ).examples
-        self.test_examples = ExamplesBuilder(
-            self.data_dir,
-            Split.test,
-            delimiter=self.delimiter,
-            is_bio=self.is_bio,
-        ).examples
-
-        if self.num_samples > 0:
-            self.train_examples = self.train_examples[: self.num_samples]
-            self.val_examples = self.val_examples[: self.num_samples]
-            self.test_examples = self.test_examples[: self.num_samples]
-
         self.tokenizer = custom_tokenizer_from_pretrained(
             self.tokenizer_name_or_path, self.cache_dir
         )
+        try:
+            self.train_examples = ExamplesBuilder(
+                self.data_dir,
+                Split.train,
+                delimiter=self.delimiter,
+                is_bio=self.is_bio,
+            ).examples
+            self.val_examples = ExamplesBuilder(
+                self.data_dir,
+                Split.dev,
+                delimiter=self.delimiter,
+                is_bio=self.is_bio,
+            ).examples
+            self.test_examples = ExamplesBuilder(
+                self.data_dir,
+                Split.test,
+                delimiter=self.delimiter,
+                is_bio=self.is_bio,
+            ).examples
 
-        # create label vocabulary from dataset
-        if not os.path.exists(self.labels_path):
-            all_examples = self.train_examples + self.val_examples + self.test_examples
-            all_labels = {
-                f"{bio}-{anno.label}" if bio != "O" else "O"
-                for ex in all_examples
-                for anno in ex.annotations
-                for bio in "BILOU"
-            }
-            label_types = sorted({l[2:] for l in sorted(all_labels) if l != "O"})
-            with open(self.labels_path, "w") as fp:
-                fp.write("\n".join(label_types))
-        self.label_token_aligner = LabelTokenAligner(self.labels_path)
+            if self.num_samples > 0:
+                self.train_examples = self.train_examples[: self.num_samples]
+                self.val_examples = self.val_examples[: self.num_samples]
+                self.test_examples = self.test_examples[: self.num_samples]
 
-        self.train_dataset = self.create_dataset(
-            self.train_examples, self.tokenizer, self.label_token_aligner
-        )
-        self.val_dataset = self.create_dataset(
-            self.val_examples, self.tokenizer, self.label_token_aligner
-        )
-        self.test_dataset = self.create_dataset(
-            self.test_examples, self.tokenizer, self.label_token_aligner
-        )
+            # create label vocabulary from dataset
+            if not os.path.exists(self.labels_path):
+                all_examples = self.train_examples + self.val_examples + self.test_examples
+                all_labels = {
+                    f"{bio}-{anno.label}" if bio != "O" else "O"
+                    for ex in all_examples
+                    for anno in ex.annotations
+                    for bio in "BILOU"
+                }
+                label_types = sorted({l[2:] for l in sorted(all_labels) if l != "O"})
+                with open(self.labels_path, "w") as fp:
+                    fp.write("\n".join(label_types))
+            self.label_token_aligner = LabelTokenAligner(self.labels_path)
 
-        self.dataset_size = len(self.train_dataset)
+            self.train_dataset = self.create_dataset(
+                self.train_examples, self.tokenizer, self.label_token_aligner
+            )
+            self.val_dataset = self.create_dataset(
+                self.val_examples, self.tokenizer, self.label_token_aligner
+            )
+            self.test_dataset = self.create_dataset(
+                self.test_examples, self.tokenizer, self.label_token_aligner
+            )
+
+            self.dataset_size = len(self.train_dataset)
+            self.bilou = True
+            self.use_datasets = False
+            self.data_collator = InputFeaturesBatch
+
+        except NoLocalFileError:
+            features = CoNLL2003TokenClassificationFeatures(self.tokenizer)
+            # input_ids, attention_mask, label_ids
+            self.train_dataset = features.train_datasets  # MyDataset(features.train_features)
+            self.val_dataset = features.val_datasets  # MyDataset(features.val_features)
+            self.test_dataset = features.test_datasets  # MyDataset(features.test_features)
+            self.dataset_size = len(self.train_dataset)
+            self.bilou = False
+            self.use_datasets = True
+            self.data_collator = DataCollatorForTokenClassification(self.tokenizer)
+            # create label vocabulary from dataset
+            if not os.path.exists(self.labels_path):
+                all_labels = features.label_list
+                label_types = sorted({l[2:] for l in sorted(all_labels) if l != "O"})
+                with open(self.labels_path, "w") as fp:
+                    fp.write("\n".join(label_types))
+
+            print(self.val_dataset[0].keys())
+            print(self.val_dataset[:10])
 
     def setup(self, stage=None):
         """
@@ -464,13 +655,15 @@ class TokenClassificationDataModule(pl.LightningDataModule):
     @staticmethod
     def create_dataloader(
         ds: TokenClassificationDataset,
+        data_collator,
         batch_size: int,
         num_workers: int = 0,
         shuffle: bool = False,
     ) -> DataLoader:
+        
         return DataLoader(
             ds,
-            collate_fn=InputFeaturesBatch,
+            collate_fn=data_collator,
             batch_size=batch_size,
             num_workers=num_workers,
             pin_memory=True,
@@ -479,17 +672,17 @@ class TokenClassificationDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         return self.create_dataloader(
-            self.train_dataset, self.train_batch_size, self.num_workers, shuffle=True
+            self.train_dataset, self.data_collator, self.train_batch_size, self.num_workers, shuffle=True,
         )
 
     def val_dataloader(self):
         return self.create_dataloader(
-            self.val_dataset, self.eval_batch_size, self.num_workers, shuffle=False
+            self.val_dataset, self.data_collator, self.eval_batch_size, self.num_workers, shuffle=False,
         )
 
     def test_dataloader(self):
         return self.create_dataloader(
-            self.test_dataset, self.eval_batch_size, self.num_workers, shuffle=False
+            self.test_dataset, self.data_collator, self.eval_batch_size, self.num_workers, shuffle=False,
         )
 
     def total_steps(self) -> int:

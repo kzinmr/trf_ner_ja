@@ -6,7 +6,7 @@ export PRETRAINED_MODEL=${PRETRAINED_DIR}/model_discriminator.pt
 export PRETRAINED_CONFIG=${PRETRAINED_DIR}/config.json
 export PRETRAINED_TOKENIZER=${PRETRAINED_DIR}/tokenizer.json
 
-export LABEL_PATH=$DATA_DIR/label_types.txt
+export LABEL_PATH=${WORK_DIR}/label_types.txt
 
 export DATA_DIR=${WORK_DIR}/conll03/
 export OUTPUT_DIR=${WORK_DIR}/outputs/
