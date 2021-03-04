@@ -31,7 +31,7 @@ class LabelTokenAligner:
         self.bilou = bilou
 
         with open(labels_path, "r") as f:
-            labels = [l for l in f.read().splitlines() if l and l != "O"]
+            labels = [l for l in f.read().splitlines() if l.strip() and l != "O"]
         self.labels_to_id = {"O": 0}
         self.ids_to_label = {0: "O"}
         for i, (label, s) in enumerate(product(labels, "BILU" if self.bilou else "BI"), 1):

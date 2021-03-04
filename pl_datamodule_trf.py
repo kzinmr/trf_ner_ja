@@ -656,7 +656,9 @@ class TokenClassificationDataModule(pl.LightningDataModule):
             if not os.path.exists(self.labels_path):
                 label_types = sorted({l[2:] for l in sorted(all_labels) if l != "O"})
                 with open(self.labels_path, "w") as fp:
-                    fp.write("\n".join(label_types))
+                    for l in label_types:
+                        fp.write(l)
+                        fp.write("\n")
             self.label_token_aligner = LabelTokenAligner(self.labels_path, self.bilou)
 
             self.train_dataset = self.create_dataset(
