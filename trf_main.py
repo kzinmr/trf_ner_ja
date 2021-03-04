@@ -228,7 +228,7 @@ if __name__ == "__main__":
     print(output.metrics)
     
     predictions = np.argmax(output.predictions, axis=2)
-    labels = [d["label"] for d in test_dataset]
+    labels = [d["labels"] for d in test_dataset]
     true_predictions = [
         [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
         for prediction, label in zip(predictions, labels)
