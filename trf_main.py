@@ -228,6 +228,7 @@ if __name__ == "__main__":
     output = trainer.predict(test_dataset)
     print(output.metrics)
     
+    input_ids = [d["input_ids"] for d in test_dataset]
     predictions = np.argmax(output.predictions, axis=2)
     labels = [d["labels"] for d in test_dataset]
     true_predictions = [
@@ -238,11 +239,14 @@ if __name__ == "__main__":
         [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
         for prediction, label in zip(predictions, labels)
     ]
-
+    input_tokens = [
+        tokenizer.convert_ids_to_tokens([i for (i, l) in zip(ids, label) if l != -100])
+        for ids, label in zip(input_ids, labels)
+    ]
     with open(os.path.join(data_dir, 'test.tsv'), 'w') as fp:
-        for golds, preds in zip(true_labels, true_predictions):
-            for g, p in zip(golds, preds):
-                fp.write(f'{g}\t{p}\n')
+        for tokens, golds, preds in zip(input_tokens, true_labels, true_predictions):
+            for tok, g, p in zip(tokens, golds, preds):
+                fp.write(f'{tok}\t{g}\t{p}\n')
             fp.write('\n')
 
     trainer.save_model(data_dir)
