@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Optional
 import numpy as np
 import pytorch_lightning as pl
@@ -13,7 +14,7 @@ from transformers import (
     TrainingArguments,
 )
 
-from pl_datamodule_trf import TokenClassificationDataModule, InputFeaturesBatch
+from pl_datamodule_trf import ExamplesBuilder, TokenClassificationDataModule
 from pl_main import build_args
 
 
@@ -126,8 +127,11 @@ class CoNLL2003TokenClassificationFeatures:
 
 if __name__ == "__main__":
 
-    if False:
-        # hub-model & datasets
+    conll03 = False
+    ja_gsd = False
+
+    if conll03:
+        # en-model & en-datasets
         model_checkpoint = "distilbert-base-uncased"
         tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
         
@@ -138,7 +142,7 @@ if __name__ == "__main__":
         test_dataset = features.test_datasets
         label_list = features.label_list
     else:
-        # local-model & local-dataset
+        # ja-model & ja-dataset
         model_checkpoint = "cl-tohoku/bert-base-japanese"
         tokenizer = BertTokenizerFast.from_pretrained(model_checkpoint)
 
@@ -147,6 +151,20 @@ if __name__ == "__main__":
         args.gpu = torch.cuda.is_available()
         args.num_samples = 10
         pl.seed_everything(args.seed)
+
+        if ja_gsd:
+            ExamplesBuilder.download_dataset(args.data_dir)
+            args.delimiter = '\t'
+            args.is_bio = False
+            args.scheme = 'bio'
+        else:
+            if not (Path(args.data_dir) / f"train.txt").exists():
+                exit(0)
+
+            args.delimiter = ' '
+            args.is_bio = False
+            args.scheme = 'bio'
+
         dm = TokenClassificationDataModule(args)
         dm.prepare_data()
 

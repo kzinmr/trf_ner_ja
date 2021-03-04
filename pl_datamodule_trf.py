@@ -593,6 +593,7 @@ class TokenClassificationDataModule(pl.LightningDataModule):
 
         self.delimiter = hparams.delimiter
         self.is_bio = hparams.is_bio
+        self.bilou = hparams.scheme == "bilou"
 
     def prepare_data(self):
         """
@@ -602,11 +603,6 @@ class TokenClassificationDataModule(pl.LightningDataModule):
             self.tokenizer_name_or_path, self.cache_dir
         )
         try:
-            # ExamplesBuilder.download_dataset(self.data_dir)
-            self.delimiter = '\t'
-            self.is_bio = False
-            self.bilou = False
-
             self.train_examples = ExamplesBuilder(
                 self.data_dir,
                 Split.train,
@@ -813,5 +809,10 @@ class TokenClassificationDataModule(pl.LightningDataModule):
             help="delimiter between token and label in one line.",
         )
         parser.add_argument("--is_bio", action="store_true")
-
+        parser.add_argument(
+            "--scheme",
+            default="bilou",
+            type=str,
+            help="tag scheme.",
+        )
         return parser
