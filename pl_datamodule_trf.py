@@ -652,6 +652,7 @@ class TokenClassificationDataModule(pl.LightningDataModule):
                 for bio in ("BILOU" if self.bilou else "BIO")
             }
             self.label_list = sorted(all_labels)
+            logger.info(self.label_list)
             if not os.path.exists(self.labels_path):
                 label_types = sorted({l[2:] for l in sorted(all_labels) if l != "O"})
                 with open(self.labels_path, "w") as fp:
