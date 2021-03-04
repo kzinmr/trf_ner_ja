@@ -698,12 +698,12 @@ class TokenClassificationDataModule(pl.LightningDataModule):
             # create label vocabulary from dataset
             all_examples = self.train_examples + self.val_examples + self.test_examples
             all_labels = {
-                f"{bio}-{anno.label}" if bio != "O" else "O"
+                f"{bio}-{anno.label}"
                 for ex in all_examples
                 for anno in ex.annotations
-                for bio in ("BILOU" if self.bilou else "BIO")
+                for bio in ("BILU" if self.bilou else "BI")
             }
-            self.label_list = sorted(all_labels)
+            self.label_list = ["O"] + sorted(all_labels)
             print(self.label_list)
             # if not os.path.exists(self.labels_path):
             label_types = sorted({l[2:] for l in sorted(all_labels) if l != "O"})

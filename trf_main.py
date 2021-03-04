@@ -131,6 +131,7 @@ if __name__ == "__main__":
 
     conll03 = False
     ja_gsd = False
+    data_dir = "/app/workspace/"
 
     if conll03:
         # en-model & en-datasets
@@ -157,8 +158,8 @@ if __name__ == "__main__":
         pl.seed_everything(args.seed)
 
         if ja_gsd:
-            ExamplesBuilder.download_dataset(args.data_dir)
-        elif not (Path(args.data_dir) / f"train.txt").exists():
+            ExamplesBuilder.download_dataset(data_dir)
+        elif not (Path(data_dir) / f"train.txt").exists():
             exit(0)
 
         args.delimiter = "\t"
@@ -237,10 +238,11 @@ if __name__ == "__main__":
         [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
         for prediction, label in zip(predictions, labels)
     ]
-    with open(os.path.join(args.data_dir, 'test.tsv'), 'w') as fp:
+
+    with open(os.path.join(data_dir, 'test.tsv'), 'w') as fp:
         for golds, preds in zip(true_labels, true_predictions):
             for g, p in zip(golds, preds):
                 fp.write(f'{g}\t{p}\n')
             fp.write('\n')
 
-    trainer.save_model(args.data_dir)
+    trainer.save_model(data_dir)
