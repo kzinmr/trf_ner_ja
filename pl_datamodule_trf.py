@@ -233,12 +233,12 @@ class ExamplesBuilder:
             )
             end = time.time()
             read_time = end - start
-            logger.info(f'READ TIME({split.value}): {read_time}')
+            print(f'READ TIME({split.value}): {read_time}')
             start = time.time()
             self.examples = self.convert_spandata(self.token_examples)
             end = time.time()
             conv_time = end - start
-            logger.info(f'CONVERT TIME({split.value}): {conv_time}')
+            print(f'CONVERT TIME({split.value}): {conv_time}')
         elif (datadir_p / f"{split.value}.jsonl").exists():
             self.examples = self.read_span_examples(data_dir, split)
         else:
@@ -247,9 +247,9 @@ class ExamplesBuilder:
             # datasets = load_dataset("conll2003")
             # self.examples = datasets[split.value if split.value != "dev" else "validation"]
 
-        # logger.info(f"0-th sentence length: {len(self.examples[0].content)}")
-        # logger.info(self.examples[0].content[:10])
-        # logger.info(self.examples[0].annotations)
+        # print(f"0-th sentence length: {len(self.examples[0].content)}")
+        # print(self.examples[0].content[:10])
+        # print(self.examples[0].annotations)
 
     @staticmethod
     def download_dataset(data_dir: Union[str, Path]):
@@ -262,7 +262,7 @@ class ExamplesBuilder:
 
         for mode in Split:
             mode = mode.value
-            logger.info(f'Fetching {mode} dataset...')
+            print(f'Fetching {mode} dataset...')
             url = f"https://github.com/megagonlabs/UD_Japanese-GSD/releases/download/v2.6-NE/{mode}.bio"
             file_path = os.path.join(data_dir, f"{mode}.txt")
             _download_data(url, file_path)
@@ -652,7 +652,7 @@ class TokenClassificationDataModule(pl.LightningDataModule):
                 for bio in ("BILOU" if self.bilou else "BIO")
             }
             self.label_list = sorted(all_labels)
-            logger.info(self.label_list)
+            print(self.label_list)
             if not os.path.exists(self.labels_path):
                 label_types = sorted({l[2:] for l in sorted(all_labels) if l != "O"})
                 with open(self.labels_path, "w") as fp:
@@ -661,15 +661,29 @@ class TokenClassificationDataModule(pl.LightningDataModule):
                         fp.write("\n")
             self.label_token_aligner = LabelTokenAligner(self.labels_path, self.bilou)
 
+            start = time.time()
             self.train_dataset = self.create_dataset(
                 self.train_examples, self.tokenizer, self.label_token_aligner
             )
+            end = time.time()
+            read_time = end - start
+            print(f'DATASET TIME(train): {read_time}')
+
+            start = time.time()
             self.val_dataset = self.create_dataset(
                 self.val_examples, self.tokenizer, self.label_token_aligner
             )
+            end = time.time()
+            read_time = end - start
+            print(f'DATASET TIME(val): {read_time}')
+
+            start = time.time()
             self.test_dataset = self.create_dataset(
                 self.test_examples, self.tokenizer, self.label_token_aligner
             )
+            end = time.time()
+            read_time = end - start
+            print(f'DATASET TIME(test): {read_time}')
 
             self.dataset_size = len(self.train_dataset)
 
@@ -698,8 +712,8 @@ class TokenClassificationDataModule(pl.LightningDataModule):
                 with open(self.labels_path, "w") as fp:
                     fp.write("\n".join(label_types))
 
-            # logger.info(self.val_dataset[0].keys())
-            # logger.info(self.val_dataset[:10])
+            # print(self.val_dataset[0].keys())
+            # print(self.val_dataset[:10])
 
     def setup(self, stage=None):
         """
