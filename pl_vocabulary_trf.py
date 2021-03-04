@@ -27,14 +27,16 @@ class LabelTokenAligner:
     Align word-wise BIOLU-labels with subword tokens
     """
 
-    def __init__(self, labels_path: str, bilou:bool=True):
+    def __init__(self, labels_path: str, bilou: bool = True):
         self.bilou = bilou
 
         with open(labels_path, "r") as f:
             labels = [l for l in f.read().splitlines() if l.strip() and l != "O"]
         self.labels_to_id = {"O": 0}
         self.ids_to_label = {0: "O"}
-        for i, (label, s) in enumerate(product(labels, "BILU" if self.bilou else "BI"), 1):
+        for i, (label, s) in enumerate(
+            product(labels, "BILU" if self.bilou else "BI"), 1
+        ):
             l = f"{s}-{label}"
             self.labels_to_id[l] = i
             self.ids_to_label[i] = l
@@ -44,15 +46,19 @@ class LabelTokenAligner:
         with open(labels_path, "r") as f:
             labels = [l for l in f.read().splitlines() if l and l != "O"]
         ids_to_label = {
-                i: f"{s}-{label}"
-                for i, (label, s) in enumerate(product(labels, "BILU" if bilou else "BI"), 1)
+            i: f"{s}-{label}"
+            for i, (label, s) in enumerate(
+                product(labels, "BILU" if bilou else "BI"), 1
+            )
         }
         ids_to_label[0] = "O"
         return ids_to_label
 
     @staticmethod
     def align_tokens_and_annotations_bilou(
-        tokenized: Encoding, annotations: List[SpanAnnotation], bilou:bool = True,
+        tokenized: Encoding,
+        annotations: List[SpanAnnotation],
+        bilou: bool = True,
     ) -> StrList:
         """Recover tokenwise BIOLU-labels by using char-token alignment info in Encoding.
         :param tokenized: output of PreTrainedTokenizerFast
@@ -87,7 +93,9 @@ class LabelTokenAligner:
                     aligned_labels[token_ix] = f"{prefix}-{anno.label}"
         if not bilou:
             # s/L/I, s/U/B
-            aligned_labels = [re.sub("^L", "I", re.sub("^U", "B", label)) for label in aligned_labels]
+            aligned_labels = [
+                re.sub("^L", "I", re.sub("^U", "B", label)) for label in aligned_labels
+            ]
         return aligned_labels
 
     def align_labels_with_tokens(

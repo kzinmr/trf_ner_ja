@@ -1,5 +1,6 @@
 from pathlib import Path
 from typing import Optional
+
 import numpy as np
 import pytorch_lightning as pl
 import torch
@@ -134,8 +135,10 @@ if __name__ == "__main__":
         # en-model & en-datasets
         model_checkpoint = "distilbert-base-uncased"
         tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
-        
-        features = CoNLL2003TokenClassificationFeatures(tokenizer, label_all_tokens=True)
+
+        features = CoNLL2003TokenClassificationFeatures(
+            tokenizer, label_all_tokens=True
+        )
 
         train_dataset = features.train_datasets
         val_dataset = features.val_datasets
@@ -154,16 +157,16 @@ if __name__ == "__main__":
 
         if ja_gsd:
             ExamplesBuilder.download_dataset(args.data_dir)
-            args.delimiter = '\t'
+            args.delimiter = "\t"
             args.is_bio = False
-            args.scheme = 'bio'
+            args.scheme = "bio"
         else:
             if not (Path(args.data_dir) / f"train.txt").exists():
                 exit(0)
 
-            args.delimiter = ' '
+            args.delimiter = " "
             args.is_bio = False
-            args.scheme = 'bio'
+            args.scheme = "bio"
 
         dm = TokenClassificationDataModule(args)
         dm.prepare_data()
@@ -178,8 +181,9 @@ if __name__ == "__main__":
         print(label_list)
         print(len(label_list))
 
-    data_collator = DataCollatorForTokenClassification(tokenizer) # InputFeaturesBatch
+    data_collator = DataCollatorForTokenClassification(tokenizer)  # InputFeaturesBatch
     metric = load_metric("seqeval")
+
     def compute_metrics(p):
         predictions, labels = p
         predictions = np.argmax(predictions, axis=2)
@@ -202,7 +206,6 @@ if __name__ == "__main__":
             "accuracy": results["overall_accuracy"],
         }
 
-
     model = AutoModelForTokenClassification.from_pretrained(
         model_checkpoint, num_labels=len(label_list)
     )
@@ -215,7 +218,7 @@ if __name__ == "__main__":
         num_train_epochs=1,
         weight_decay=0.01,
     )
-    
+
     trainer = Trainer(
         model,
         args,

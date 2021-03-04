@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import time
 from argparse import ArgumentParser, Namespace
@@ -23,8 +24,6 @@ from pl_vocabulary_trf import (
     LabelTokenAligner,
     custom_tokenizer_from_pretrained,
 )
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -233,12 +232,12 @@ class ExamplesBuilder:
             )
             end = time.time()
             read_time = end - start
-            print(f'READ TIME({split.value}): {read_time}')
+            print(f"READ TIME({split.value}): {read_time}")
             start = time.time()
             self.examples = self.convert_spandata(self.token_examples)
             end = time.time()
             conv_time = end - start
-            print(f'CONVERT TIME({split.value}): {conv_time}')
+            print(f"CONVERT TIME({split.value}): {conv_time}")
         elif (datadir_p / f"{split.value}.jsonl").exists():
             self.examples = self.read_span_examples(data_dir, split)
         else:
@@ -262,7 +261,7 @@ class ExamplesBuilder:
 
         for mode in Split:
             mode = mode.value
-            print(f'Fetching {mode} dataset...')
+            print(f"Fetching {mode} dataset...")
             url = f"https://github.com/megagonlabs/UD_Japanese-GSD/releases/download/v2.6-NE/{mode}.bio"
             file_path = os.path.join(data_dir, f"{mode}.txt")
             _download_data(url, file_path)
@@ -336,7 +335,14 @@ class ExamplesBuilder:
         """
         Read token-wise data like CoNLL2003 from file
         """
-        lines = ExamplesBuilder.read_lines(data_dir, mode, ".txt")
+        # lines = ExamplesBuilder.read_lines(data_dir, mode, ".txt")
+        if isinstance(mode, Split):
+            mode = mode.value
+        file_path = os.path.join(data_dir, f"{mode}.txt")
+        lines = []
+        with open(file_path, encoding="utf-8") as f:
+            lines = f.read().split("\n")
+
         if is_bio:
             lines = ExamplesBuilder.bio2biolu(lines)
         guid_index = 1
@@ -431,7 +437,14 @@ class ExamplesBuilder:
         https://camphr.readthedocs.io/en/latest/notes/finetune_transformers.html#id13
         """
 
-        lines = ExamplesBuilder.read_lines(data_dir, mode, ".jsonl")
+        # lines = ExamplesBuilder.read_lines(data_dir, mode, ".jsonl")
+        if isinstance(mode, Split):
+            mode = mode.value
+        file_path = os.path.join(data_dir, f"{mode}.jsonl")
+        lines = []
+        with open(file_path, encoding="utf-8") as f:
+            lines = [line for line in f if line.strip()]
+
         span_examples: List[StringSpanExample] = []
         for i, jl in enumerate(lines):
             jd = json.loads(jl)
@@ -462,29 +475,36 @@ class TokenClassificationDataset(Dataset):
         tokenizer: PreTrainedTokenizerFast,
         label_token_aligner: LabelTokenAligner,
         tokens_per_batch: int = 32,
-        window_stride: Optional[int] = None,
+        window_stride: int = -1,
     ):
         """tokenize_and_align_labels with long text (i.e. truncation is disabled)"""
 
-        if window_stride is None or window_stride <= 0:
-            self.window_stride = tokens_per_batch
-        elif window_stride > 0 and window_stride < tokens_per_batch:
+        self.window_stride = tokens_per_batch
+        if window_stride > 0 and window_stride < tokens_per_batch:
             self.window_stride = window_stride
         self.tokens_per_batch = tokens_per_batch
 
+        self.tokenizer = tokenizer
+        self.label_token_aligner = label_token_aligner
+        self.label_all_tokens = True
+
         self.features: List[InputFeatures] = []
         self.examples: List[TokenClassificationExample] = []
+        self.tokenize_and_align_labels_v1(examples)
+        self._n_features = len(self.features)
+        self.features_dict = self.to_dict()
 
+    def tokenize_and_align_labels_v1(self, examples):
         # tokenize text into subwords
         texts: StrList = [ex.content for ex in examples]
-        tokenized_batch: BatchEncoding = tokenizer(texts, add_special_tokens=False)
+        tokenized_batch: BatchEncoding = self.tokenizer(texts, add_special_tokens=False)
         encodings: List[Encoding] = tokenized_batch.encodings
 
         # align character span labels with subwords
         annotations: List[List[SpanAnnotation]] = [ex.annotations for ex in examples]
         aligned_label_ids: IntListList = list(
             starmap(
-                label_token_aligner.align_labels_with_tokens,
+                self.label_token_aligner.align_labels_with_tokens,
                 zip(encodings, annotations),
             )
         )
@@ -494,33 +514,67 @@ class TokenClassificationDataset(Dataset):
         guids: StrList = [ex.guid for ex in examples]
         for guid, encoding, label_ids in zip(guids, encodings, aligned_label_ids):
             seq_length = len(label_ids)
-            for start in range(0, seq_length, self.window_stride):
-                end = min(start + self.tokens_per_batch, seq_length)
-
+            window_spans = [
+                (start, min(start + self.tokens_per_batch, seq_length))
+                for start in range(0, seq_length, self.window_stride)
+            ]
+            for start, end in window_spans:
                 n_padding_to_add = max(0, self.tokens_per_batch - end + start)
+                input_ids = (
+                    encoding.ids[start:end]
+                    + [self.tokenizer.pad_token_id] * n_padding_to_add
+                )
+                label_ids = (
+                    label_ids[start:end] + [PAD_TOKEN_LABEL_ID] * n_padding_to_add
+                )
+                attention_mask = (
+                    encoding.attention_mask[start:end] + [0] * n_padding_to_add
+                )
                 self.features.append(
                     InputFeatures(
-                        input_ids=encoding.ids[start:end]
-                        + [tokenizer.pad_token_id] * n_padding_to_add,
-                        label_ids=(
-                            label_ids[start:end]
-                            + [PAD_TOKEN_LABEL_ID] * n_padding_to_add
-                        ),
-                        attention_mask=(
-                            encoding.attention_mask[start:end] + [0] * n_padding_to_add
-                        ),
+                        input_ids=input_ids,
+                        label_ids=label_ids,
+                        attention_mask=attention_mask,
                     )
                 )
 
                 subwords = encoding.tokens[start:end]
                 labels = [
-                    label_token_aligner.ids_to_label[i] for i in label_ids[start:end]
+                    self.label_token_aligner.ids_to_label[i]
+                    for i in label_ids[start:end]
                 ]
                 self.examples.append(
                     TokenClassificationExample(guid=guid, words=subwords, labels=labels)
                 )
 
-        self._n_features = len(self.features)
+    def tokenize_and_align_labels(self, examples):
+        tokenized_inputs: BatchEncoding = self.tokenizer(
+            examples["tokens"], truncation=True, is_split_into_words=True
+        )
+
+        label_ids_list: IntListList = []
+        for i, tags in enumerate(examples["ner_tags"]):
+            word_ids = tokenized_inputs.word_ids(batch_index=i)
+            previous_word_idx = None
+            label_ids: IntList = []
+            for word_idx in word_ids:
+                # Special tokens have a word id that is None. We set the label to -100 so they are automatically
+                # ignored in the loss function.
+                if word_idx is None:
+                    label_ids.append(-100)
+                # We set the label for the first token of each word.
+                elif word_idx != previous_word_idx:
+                    label_ids.append(tags[word_idx])
+                # For the other tokens in a word, we set the label to either the current label or -100,
+                # depending on the label_all_tokens flag.
+                else:
+                    label_ids.append(tags[word_idx] if self.label_all_tokens else -100)
+                previous_word_idx = word_idx
+
+            label_ids_list.append(label_ids)
+
+        tokenized_inputs["labels"] = label_ids_list
+        return tokenized_inputs
 
     def __len__(self):
         return self._n_features
@@ -642,9 +696,7 @@ class TokenClassificationDataModule(pl.LightningDataModule):
                 self.test_examples = self.test_examples[: self.num_samples]
 
             # create label vocabulary from dataset
-            all_examples = (
-                self.train_examples + self.val_examples + self.test_examples
-            )
+            all_examples = self.train_examples + self.val_examples + self.test_examples
             all_labels = {
                 f"{bio}-{anno.label}" if bio != "O" else "O"
                 for ex in all_examples
@@ -667,7 +719,7 @@ class TokenClassificationDataModule(pl.LightningDataModule):
             )
             end = time.time()
             read_time = end - start
-            print(f'DATASET TIME(train): {read_time}')
+            print(f"DATASET TIME(train): {read_time}")
 
             start = time.time()
             self.val_dataset = self.create_dataset(
@@ -675,7 +727,7 @@ class TokenClassificationDataModule(pl.LightningDataModule):
             )
             end = time.time()
             read_time = end - start
-            print(f'DATASET TIME(val): {read_time}')
+            print(f"DATASET TIME(val): {read_time}")
 
             start = time.time()
             self.test_dataset = self.create_dataset(
@@ -683,7 +735,7 @@ class TokenClassificationDataModule(pl.LightningDataModule):
             )
             end = time.time()
             read_time = end - start
-            print(f'DATASET TIME(test): {read_time}')
+            print(f"DATASET TIME(test): {read_time}")
 
             self.dataset_size = len(self.train_dataset)
 
