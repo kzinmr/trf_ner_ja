@@ -175,11 +175,6 @@ if __name__ == "__main__":
         val_dataset = dm.val_dataset.to_dict()
         test_dataset = dm.test_dataset.to_dict()
         label_list = dm.label_list
-        print(val_dataset[:3])
-        print(dm.label_token_aligner.labels_to_id)
-        print(dm.label_token_aligner.ids_to_label)
-        print(label_list)
-        print(len(label_list))
 
     data_collator = DataCollatorForTokenClassification(tokenizer)  # InputFeaturesBatch
     metric = load_metric("seqeval")

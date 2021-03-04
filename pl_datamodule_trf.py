@@ -705,12 +705,13 @@ class TokenClassificationDataModule(pl.LightningDataModule):
             }
             self.label_list = sorted(all_labels)
             print(self.label_list)
-            if not os.path.exists(self.labels_path):
-                label_types = sorted({l[2:] for l in sorted(all_labels) if l != "O"})
-                with open(self.labels_path, "w") as fp:
-                    for l in label_types:
-                        fp.write(l)
-                        fp.write("\n")
+            # if not os.path.exists(self.labels_path):
+            label_types = sorted({l[2:] for l in sorted(all_labels) if l != "O"})
+            with open(self.labels_path, "w") as fp:
+                for l in label_types:
+                    fp.write(l)
+                    fp.write("\n")
+
             self.label_token_aligner = LabelTokenAligner(self.labels_path, self.bilou)
 
             start = time.time()
@@ -741,6 +742,10 @@ class TokenClassificationDataModule(pl.LightningDataModule):
 
             self.use_datasets = False
             self.data_collator = InputFeaturesBatch
+
+            print(f"0-th sentence length: {len(self.examples[0].content)}")
+            print(self.val_examples[:3])
+            print(self.val_dataset[:3])
 
         except NoLocalFileError:
 
