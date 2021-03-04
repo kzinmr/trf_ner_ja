@@ -47,5 +47,7 @@ COPY pl_vocabulary_trf.py /app/pl_vocabulary_trf.py
 COPY pl_main.py /app/pl_main.py
 COPY pl_module_trf.py /app/pl_module_trf.py
 COPY pl_datamodule_trf.py /app/pl_datamodule_trf.py
+# CMD ["bash", "/app/run.sh"]
 
-CMD ["bash", "/app/run.sh"]
+COPY trf_main.py /app/trf_main.py
+CMD ["python3", "/app/trf_main.py"]

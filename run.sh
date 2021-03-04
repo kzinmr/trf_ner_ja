@@ -24,7 +24,7 @@ export MAX_LENGTH=128
 export BATCH_SIZE=16
 # BATCH_SIZE * ACM_GRAD_BATCH is actual batch size
 export ACM_GRAD_BATCH=1
-export LEARNING_RATE=0.001
+export LEARNING_RATE=2e-5  # 0.001
 export WEIGHT_DECAY=0.01
 export PATIENCE=3
 export ANNEAL_FACTOR=0.5

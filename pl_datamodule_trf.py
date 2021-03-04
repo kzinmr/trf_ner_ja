@@ -248,6 +248,7 @@ class ExamplesBuilder:
 
         for mode in Split:
             mode = mode.value
+            print(f'Fetching {mode} dataset...')
             url = f"https://github.com/megagonlabs/UD_Japanese-GSD/releases/download/v2.6-NE/{mode}.bio"
             file_path = os.path.join(data_dir, f"{mode}.txt")
             _download_data(url, file_path)
@@ -443,12 +444,11 @@ class TokenClassificationDataset(Dataset):
 
     def __init__(
         self,
-        examples: List,  # [StringSpanExample],
+        examples: List[StringSpanExample],
         tokenizer: PreTrainedTokenizerFast,
         label_token_aligner: LabelTokenAligner,
         tokens_per_batch: int = 32,
         window_stride: Optional[int] = None,
-        label_all_tokens=True,
     ):
         """tokenize_and_align_labels with long text (i.e. truncation is disabled)"""
 
@@ -513,6 +513,16 @@ class TokenClassificationDataset(Dataset):
 
     def __getitem__(self, idx) -> InputFeatures:
         return self.features[idx]
+
+    def to_dict(self):
+        return [
+            {
+                "input_ids": self.features[ix].input_ids,
+                "attention_mask": self.features[ix].attention_mask,
+                "labels": self.features[ix].label_ids,
+            }
+            for ix in range(self._n_features)
+        ]
 
 
 class InputFeaturesBatch:
@@ -592,6 +602,11 @@ class TokenClassificationDataModule(pl.LightningDataModule):
             self.tokenizer_name_or_path, self.cache_dir
         )
         try:
+            # ExamplesBuilder.download_dataset(self.data_dir)
+            self.delimiter = '\t'
+            self.is_bio = False
+            self.bilou = False
+
             self.train_examples = ExamplesBuilder(
                 self.data_dir,
                 Split.train,
@@ -617,20 +632,21 @@ class TokenClassificationDataModule(pl.LightningDataModule):
                 self.test_examples = self.test_examples[: self.num_samples]
 
             # create label vocabulary from dataset
+            all_examples = (
+                self.train_examples + self.val_examples + self.test_examples
+            )
+            all_labels = {
+                f"{bio}-{anno.label}" if bio != "O" else "O"
+                for ex in all_examples
+                for anno in ex.annotations
+                for bio in ("BILOU" if self.bilou else "BIO")
+            }
+            self.label_list = sorted(all_labels)
             if not os.path.exists(self.labels_path):
-                all_examples = (
-                    self.train_examples + self.val_examples + self.test_examples
-                )
-                all_labels = {
-                    f"{bio}-{anno.label}" if bio != "O" else "O"
-                    for ex in all_examples
-                    for anno in ex.annotations
-                    for bio in "BILOU"
-                }
                 label_types = sorted({l[2:] for l in sorted(all_labels) if l != "O"})
                 with open(self.labels_path, "w") as fp:
                     fp.write("\n".join(label_types))
-            self.label_token_aligner = LabelTokenAligner(self.labels_path)
+            self.label_token_aligner = LabelTokenAligner(self.labels_path, self.bilou)
 
             self.train_dataset = self.create_dataset(
                 self.train_examples, self.tokenizer, self.label_token_aligner
@@ -643,11 +659,12 @@ class TokenClassificationDataModule(pl.LightningDataModule):
             )
 
             self.dataset_size = len(self.train_dataset)
-            self.bilou = True
+
             self.use_datasets = False
             self.data_collator = InputFeaturesBatch
 
         except NoLocalFileError:
+
             features = CoNLL2003TokenClassificationFeatures(self.tokenizer)
             # input_ids, attention_mask, label_ids
             self.train_dataset = (

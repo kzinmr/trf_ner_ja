@@ -43,7 +43,7 @@ def make_common_args():
         "--model_name_or_path",
         default=None,
         type=str,
-        required=True,
+        # required=True,
         help="Path to pretrained model or model identifier from huggingface.co/models",
     )
     parser.add_argument(
