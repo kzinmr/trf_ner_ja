@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from argparse import ArgumentParser, Namespace
 from itertools import starmap
 from pathlib import Path
@@ -22,6 +23,10 @@ from pl_vocabulary_trf import (
     LabelTokenAligner,
     custom_tokenizer_from_pretrained,
 )
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class NoLocalFileError(Exception):
@@ -202,7 +207,7 @@ class CoNLL2003TokenClassificationFeatures:
             elif iob == "O":
                 current_iob = "O"
             else:
-                print(f"Invalid BIO transition: {iob_transition}")
+                logger.warning(f"Invalid BIO transition: {iob_transition}")
                 if iob not in set("BIOLU"):
                     current_iob = "O"
             biolu = f"{current_iob}-{tag_type}" if current_iob != "O" else "O"
@@ -221,10 +226,19 @@ class ExamplesBuilder:
     ):
         datadir_p = Path(data_dir)
         if (datadir_p / f"{split.value}.txt").exists():
+
+            start = time.time()
             self.token_examples = self.read_examples_from_file(
                 data_dir, split, delimiter=delimiter, is_bio=is_bio
             )
+            end = time.time()
+            read_time = end - start
+            logger.info(f'READ TIME({split.value}): {read_time}')
+            start = time.time()
             self.examples = self.convert_spandata(self.token_examples)
+            end = time.time()
+            conv_time = end - start
+            logger.info(f'CONVERT TIME({split.value}): {conv_time}')
         elif (datadir_p / f"{split.value}.jsonl").exists():
             self.examples = self.read_span_examples(data_dir, split)
         else:
@@ -233,9 +247,9 @@ class ExamplesBuilder:
             # datasets = load_dataset("conll2003")
             # self.examples = datasets[split.value if split.value != "dev" else "validation"]
 
-        # print(f"0-th sentence length: {len(self.examples[0].content)}")
-        # print(self.examples[0].content[:10])
-        # print(self.examples[0].annotations)
+        # logger.info(f"0-th sentence length: {len(self.examples[0].content)}")
+        # logger.info(self.examples[0].content[:10])
+        # logger.info(self.examples[0].annotations)
 
     @staticmethod
     def download_dataset(data_dir: Union[str, Path]):
@@ -248,7 +262,7 @@ class ExamplesBuilder:
 
         for mode in Split:
             mode = mode.value
-            print(f'Fetching {mode} dataset...')
+            logger.info(f'Fetching {mode} dataset...')
             url = f"https://github.com/megagonlabs/UD_Japanese-GSD/releases/download/v2.6-NE/{mode}.bio"
             file_path = os.path.join(data_dir, f"{mode}.txt")
             _download_data(url, file_path)
@@ -293,7 +307,7 @@ class ExamplesBuilder:
                 elif iob == "O":
                     current_iob = "O"
                 else:
-                    print(f"Invalid BIO transition: {iob_transition}")
+                    logger.warning(f"Invalid BIO transition: {iob_transition}")
                     if iob not in set("BIOLU"):
                         current_iob = "O"
                 biolu = f"{current_iob}-{tag_type}" if current_iob != "O" else "O"
@@ -681,8 +695,8 @@ class TokenClassificationDataModule(pl.LightningDataModule):
                 with open(self.labels_path, "w") as fp:
                     fp.write("\n".join(label_types))
 
-            print(self.val_dataset[0].keys())
-            print(self.val_dataset[:10])
+            # logger.info(self.val_dataset[0].keys())
+            # logger.info(self.val_dataset[:10])
 
     def setup(self, stage=None):
         """
