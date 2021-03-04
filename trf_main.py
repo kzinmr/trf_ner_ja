@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -226,3 +227,24 @@ if __name__ == "__main__":
     trainer.train()
 
     trainer.evaluate()
+
+    output = trainer.predict(test_dataset)
+    print(output.metrics)
+    
+    predictions = np.argmax(output.predictions, axis=2)
+    labels = [d["label"] for d in test_dataset]
+    true_predictions = [
+        [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
+        for prediction, label in zip(predictions, labels)
+    ]
+    true_labels = [
+        [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
+        for prediction, label in zip(predictions, labels)
+    ]
+    with open(os.path.join(args.data_dir, 'test.tsv'), 'w') as fp:
+        for golds, preds in zip(true_labels, true_predictions):
+            for g, p in zip(golds, preds):
+                fp.write(f'{g}\t{p}\n')
+            fp.write('\n')
+
+    trainer.save_model(args.data_dir)
