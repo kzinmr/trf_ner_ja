@@ -790,7 +790,7 @@ class TokenClassificationDataModule(pl.LightningDataModule):
         )
         parser.add_argument(
             "--window_stride",
-            default=64,
+            default=-1,
             type=int,
             help="The stride of moving window over input sequence."
             "This must be shorter than tokens_per_batch.",

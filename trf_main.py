@@ -149,7 +149,7 @@ if __name__ == "__main__":
         args = build_args()
         args.model_name_or_path = model_checkpoint
         args.gpu = torch.cuda.is_available()
-        args.num_samples = 10
+        args.num_samples = 20000
         pl.seed_everything(args.seed)
 
         if ja_gsd:
