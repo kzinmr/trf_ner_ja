@@ -158,16 +158,12 @@ if __name__ == "__main__":
 
         if ja_gsd:
             ExamplesBuilder.download_dataset(args.data_dir)
-            args.delimiter = "\t"
-            args.is_bio = False
-            args.scheme = "bio"
-        else:
-            if not (Path(args.data_dir) / f"train.txt").exists():
-                exit(0)
+        elif not (Path(args.data_dir) / f"train.txt").exists():
+            exit(0)
 
-            args.delimiter = " "
-            args.is_bio = False
-            args.scheme = "bio"
+        args.delimiter = "\t"
+        args.is_bio = False
+        args.scheme = "bio"
 
         dm = TokenClassificationDataModule(args)
         dm.prepare_data()
