@@ -743,7 +743,6 @@ class TokenClassificationDataModule(pl.LightningDataModule):
             self.use_datasets = False
             self.data_collator = InputFeaturesBatch
 
-            print(f"0-th sentence length: {len(self.examples[0].content)}")
             print(self.val_examples[:3])
             print(self.val_dataset[:3])
 
