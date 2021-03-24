@@ -42,9 +42,17 @@ class LabelTokenAligner:
             self.ids_to_label[i] = l
 
     @staticmethod
-    def get_ids_to_label(labels_path: str, bilou: bool = True) -> Dict[int, str]:
-        with open(labels_path, "r") as f:
-            labels = [l for l in f.read().splitlines() if l and l != "O"]
+    def get_ids_to_label(labels_path: Optional[str]=None, labels: Optional[List[str]]=None, bilou: bool = True) -> Dict[int, str]:
+        if labels is None:
+            if labels_path is not None and os.path.exists(labels_path):
+                with open(labels_path, "r") as f:
+                    labels = [l for l in f.read().splitlines() if l and l != "O"]
+            else:
+                print('ERROR: No Labels are given!!')
+                exit(1)
+        else:
+            labels = sorted(set([l.split('-')[0] for l in labels if l!='O']))
+
         ids_to_label = {
             i: f"{s}-{label}"
             for i, (label, s) in enumerate(

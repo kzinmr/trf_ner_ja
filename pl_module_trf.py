@@ -63,7 +63,7 @@ class TokenClassificationModule(pl.LightningModule):
             tokenizer_path, cache_dir=self.cache_dir
         )
         self.label_ids_to_label = LabelTokenAligner.get_ids_to_label(
-            hparams.labels, self.bilou
+            labels_path=hparams.labels, bilou=self.bilou
         )
         num_labels = len(self.label_ids_to_label)
         # config
