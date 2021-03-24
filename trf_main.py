@@ -18,6 +18,31 @@ from transformers import (
 )
 
 from pl_datamodule_trf import ExamplesBuilder, TokenClassificationDataModule
+from pl_vocabulary_trf import custom_tokenizer_from_pretrained
+
+metric = load_metric("seqeval")
+
+def compute_metrics(p):
+    predictions, labels = p
+    predictions = np.argmax(predictions, axis=2)
+
+    # Remove ignored index (special tokens)
+    true_predictions = [
+        [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
+        for prediction, label in zip(predictions, labels)
+    ]
+    true_labels = [
+        [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
+        for prediction, label in zip(predictions, labels)
+    ]
+
+    results = metric.compute(predictions=true_predictions, references=true_labels)
+    return {
+        "precision": results["overall_precision"],
+        "recall": results["overall_recall"],
+        "f1": results["overall_f1"],
+        "accuracy": results["overall_accuracy"],
+    }
 
 
 class CoNLL2003TokenClassificationFeatures:
@@ -126,6 +151,7 @@ class CoNLL2003TokenClassificationFeatures:
         tokenized_inputs["labels"] = label_ids_list
         return tokenized_inputs
 
+
 def make_common_args():
     parser = argparse.ArgumentParser(description="")
     parser.add_argument(
@@ -209,6 +235,7 @@ if __name__ == "__main__":
 
     conll03 = False
     ja_gsd = False
+    custom_pretrained = False
     data_dir = "/app/workspace/"
 
     # make dataset and tokenizer
@@ -226,12 +253,23 @@ if __name__ == "__main__":
         test_dataset = features.test_datasets
         label_list = features.label_list
     else:
+        args = build_args()
+        args.model_name_or_path = "cl-tohoku/bert-base-japanese-v2"
+        model_checkpoint = args.model_name_or_path
+
+        if custom_pretrained:
+            # args.tokenizer_path = "tokenizer.json"
+            tokenizer = custom_tokenizer_from_pretrained(
+                args.tokenizer_path
+            )
+        else:
+            args.tokenizer_path = model_checkpoint
+            tokenizer = BertTokenizerFast.from_pretrained(args.tokenizer_path)
+
         if ja_gsd:
             ExamplesBuilder.download_dataset(data_dir)
         if not (Path(data_dir) / f"train.txt").exists():
             exit(0)
-
-        args = build_args()
 
         dm = TokenClassificationDataModule(args)
         dm.prepare_data()
@@ -240,35 +278,6 @@ if __name__ == "__main__":
         val_dataset = dm.val_dataset.to_dict()
         test_dataset = dm.test_dataset.to_dict()
         label_list = dm.label_list
-
-        # ja-model & ja-dataset
-        model_checkpoint = "cl-tohoku/bert-base-japanese-v2"  # args.model_name_or_path
-        tokenizer = BertTokenizerFast.from_pretrained(model_checkpoint)
-
-    data_collator = DataCollatorForTokenClassification(tokenizer)  # InputFeaturesBatch
-    metric = load_metric("seqeval")
-
-    def compute_metrics(p):
-        predictions, labels = p
-        predictions = np.argmax(predictions, axis=2)
-
-        # Remove ignored index (special tokens)
-        true_predictions = [
-            [label_list[p] for (p, l) in zip(prediction, label) if l != -100]
-            for prediction, label in zip(predictions, labels)
-        ]
-        true_labels = [
-            [label_list[l] for (p, l) in zip(prediction, label) if l != -100]
-            for prediction, label in zip(predictions, labels)
-        ]
-
-        results = metric.compute(predictions=true_predictions, references=true_labels)
-        return {
-            "precision": results["overall_precision"],
-            "recall": results["overall_recall"],
-            "f1": results["overall_f1"],
-            "accuracy": results["overall_accuracy"],
-        }
 
     model = AutoModelForTokenClassification.from_pretrained(
         model_checkpoint, num_labels=len(label_list)
@@ -282,6 +291,7 @@ if __name__ == "__main__":
         num_train_epochs=1,
         weight_decay=0.01,
     )
+    data_collator = DataCollatorForTokenClassification(tokenizer)
 
     trainer = Trainer(
         model,
@@ -292,10 +302,12 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
     )
+
     trainer.train()
 
     trainer.evaluate()
 
+    # prediction
     output = trainer.predict(test_dataset)
     print(output.metrics)
     
