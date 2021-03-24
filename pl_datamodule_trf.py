@@ -885,7 +885,7 @@ class TokenClassificationDataModule(pl.LightningDataModule):
         parser.add_argument(
             "--num_samples",
             type=int,
-            default=100,
+            default=-1,
             metavar="N",
             help="Number of samples to be used for training and evaluation steps (default: 15000) Maximum:100000",
         )

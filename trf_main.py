@@ -1,3 +1,4 @@
+import argparse
 import os
 from pathlib import Path
 from typing import Optional
@@ -17,7 +18,6 @@ from transformers import (
 )
 
 from pl_datamodule_trf import ExamplesBuilder, TokenClassificationDataModule
-from pl_main import build_args
 
 
 class CoNLL2003TokenClassificationFeatures:
@@ -126,6 +126,84 @@ class CoNLL2003TokenClassificationFeatures:
         tokenized_inputs["labels"] = label_ids_list
         return tokenized_inputs
 
+def make_common_args():
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument(
+        "--seed", type=int, default=42, help="random seed for initialization"
+    )
+    parser.add_argument(
+        "--data_dir",
+        default="/app/workspace/data",
+        type=str,
+        help="The input data dir. Should contain the training files for the CoNLL-2003 NER task.",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        help="The output directory where the model predictions and checkpoints will be written.",
+    )
+    parser.add_argument(
+        "--cache_dir",
+        default=None,
+        type=str,
+    )
+    parser.add_argument(
+        "--do_train", action="store_true", help="Whether to run training."
+    )
+    parser.add_argument(
+        "--do_predict",
+        action="store_true",
+        help="Whether to run predictions on the test set.",
+    )
+    parser.add_argument(
+        "--model_name_or_path",
+        default=None,
+        type=str,
+        # required=True,
+        help="Path to pretrained model or model identifier from huggingface.co/models",
+    )
+    parser.add_argument(
+        "--config_path",
+        default=None,
+        type=str,
+        help="Path to pretrained model config (for transformers)",
+    )
+    parser.add_argument(
+        "--tokenizer_path",
+        default=None,
+        type=str,
+        help="Path to pretrained tokenzier JSON config (for transformers)",
+    )
+    parser.add_argument(
+        "--labels",
+        default="workspace/data/label_types.txt",
+        type=str,
+        help="Path to a file containing all labels. (for transformers)",
+    )
+    parser.add_argument("--nbest", default=1, type=int, help="CNN(to be implemented)")
+    parser.add_argument("--number_normalized", default=True, type=bool, help="CNN")
+    return parser
+
+def build_args(model_checkpoint=None):
+    parser = make_common_args()
+    parser = pl.Trainer.add_argparse_args(parent_parser=parser)
+    # parser = TokenClassificationModule.add_model_specific_args(parent_parser=parser)
+    parser = TokenClassificationDataModule.add_model_specific_args(parent_parser=parser)
+    args = parser.parse_args()
+    # if notebook:        
+    #     args = parser.parse_args(args=[])
+    pl.seed_everything(args.seed)
+
+    if model_checkpoint:
+        args.model_name_or_path = model_checkpoint
+
+    args.gpu = torch.cuda.is_available()
+    # args.num_samples = 20000
+
+    args.delimiter = "\t"
+    args.is_bio = False
+    args.scheme = "bio"
+    return args
 
 if __name__ == "__main__":
 
@@ -133,6 +211,7 @@ if __name__ == "__main__":
     ja_gsd = False
     data_dir = "/app/workspace/"
 
+    # make dataset and tokenizer
     if conll03:
         # en-model & en-datasets
         model_checkpoint = "distilbert-base-uncased"
@@ -147,24 +226,12 @@ if __name__ == "__main__":
         test_dataset = features.test_datasets
         label_list = features.label_list
     else:
-        # ja-model & ja-dataset
-        model_checkpoint = "cl-tohoku/bert-base-japanese"
-        tokenizer = BertTokenizerFast.from_pretrained(model_checkpoint)
-
-        args = build_args()
-        args.model_name_or_path = model_checkpoint
-        args.gpu = torch.cuda.is_available()
-        args.num_samples = 20000
-        pl.seed_everything(args.seed)
-
         if ja_gsd:
             ExamplesBuilder.download_dataset(data_dir)
-        elif not (Path(data_dir) / f"train.txt").exists():
+        if not (Path(data_dir) / f"train.txt").exists():
             exit(0)
 
-        args.delimiter = "\t"
-        args.is_bio = False
-        args.scheme = "bio"
+        args = build_args()
 
         dm = TokenClassificationDataModule(args)
         dm.prepare_data()
@@ -173,6 +240,10 @@ if __name__ == "__main__":
         val_dataset = dm.val_dataset.to_dict()
         test_dataset = dm.test_dataset.to_dict()
         label_list = dm.label_list
+
+        # ja-model & ja-dataset
+        model_checkpoint = "cl-tohoku/bert-base-japanese-v2"  # args.model_name_or_path
+        tokenizer = BertTokenizerFast.from_pretrained(model_checkpoint)
 
     data_collator = DataCollatorForTokenClassification(tokenizer)  # InputFeaturesBatch
     metric = load_metric("seqeval")
