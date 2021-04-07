@@ -7,8 +7,9 @@ import pytorch_lightning as pl
 import torch
 from seqeval.metrics import accuracy_score
 from seqeval.metrics.sequence_labeling import precision_recall_fscore_support
-from seqeval.metrics.v1 import \
-    precision_recall_fscore_support as precision_recall_fscore_support_v1
+from seqeval.metrics.v1 import (
+    precision_recall_fscore_support as precision_recall_fscore_support_v1,
+)
 from seqeval.scheme import BILOU
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from transformers import (
@@ -20,7 +21,7 @@ from transformers import (
 from transformers.modeling_outputs import TokenClassifierOutput
 
 from data import *
-from pl_vocabulary_trf import (
+from tokenizer import (
     LabelTokenAligner,
     custom_tokenizer_from_pretrained,
 )

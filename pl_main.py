@@ -6,7 +6,7 @@ import pytorch_lightning as pl
 import torch
 from pytorch_lightning.callbacks import LearningRateMonitor, ModelCheckpoint
 
-from pl_datamodule_trf import TokenClassificationDataModule
+from datamodule import TokenClassificationDataModule
 from pl_module_trf import TokenClassificationModule
 
 

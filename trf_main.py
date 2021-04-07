@@ -17,10 +17,11 @@ from transformers import (
     TrainingArguments,
 )
 
-from pl_datamodule_trf import ExamplesBuilder, TokenClassificationDataModule
-from pl_vocabulary_trf import custom_tokenizer_from_pretrained
+from datamodule import ExamplesBuilder, TokenClassificationDataModule
+from tokenizer import custom_tokenizer_from_pretrained
 
 metric = load_metric("seqeval")
+
 
 def compute_metrics(p):
     predictions, labels = p
@@ -210,13 +211,14 @@ def make_common_args():
     parser.add_argument("--number_normalized", default=True, type=bool, help="CNN")
     return parser
 
+
 def build_args(model_checkpoint=None):
     parser = make_common_args()
     parser = pl.Trainer.add_argparse_args(parent_parser=parser)
     # parser = TokenClassificationModule.add_model_specific_args(parent_parser=parser)
     parser = TokenClassificationDataModule.add_model_specific_args(parent_parser=parser)
     args = parser.parse_args()
-    # if notebook:        
+    # if notebook:
     #     args = parser.parse_args(args=[])
     pl.seed_everything(args.seed)
 
@@ -230,6 +232,7 @@ def build_args(model_checkpoint=None):
     args.is_bio = False
     args.scheme = "bio"
     return args
+
 
 if __name__ == "__main__":
 
@@ -259,9 +262,7 @@ if __name__ == "__main__":
 
         if custom_pretrained:
             # args.tokenizer_path = "tokenizer.json"
-            tokenizer = custom_tokenizer_from_pretrained(
-                args.tokenizer_path
-            )
+            tokenizer = custom_tokenizer_from_pretrained(args.tokenizer_path)
         else:
             args.tokenizer_path = model_checkpoint
             tokenizer = BertTokenizerFast.from_pretrained(args.tokenizer_path)
@@ -310,7 +311,7 @@ if __name__ == "__main__":
     # prediction
     output = trainer.predict(test_dataset)
     print(output.metrics)
-    
+
     input_ids = [d["input_ids"] for d in test_dataset]
     predictions = np.argmax(output.predictions, axis=2)
     labels = [d["labels"] for d in test_dataset]
@@ -326,10 +327,10 @@ if __name__ == "__main__":
         tokenizer.convert_ids_to_tokens([i for (i, l) in zip(ids, label) if l != -100])
         for ids, label in zip(input_ids, labels)
     ]
-    with open(os.path.join(data_dir, 'test.tsv'), 'w') as fp:
+    with open(os.path.join(data_dir, "test.tsv"), "w") as fp:
         for tokens, golds, preds in zip(input_tokens, true_labels, true_predictions):
             for tok, g, p in zip(tokens, golds, preds):
-                fp.write(f'{tok}\t{g}\t{p}\n')
-            fp.write('\n')
+                fp.write(f"{tok}\t{g}\t{p}\n")
+            fp.write("\n")
 
     trainer.save_model(data_dir)

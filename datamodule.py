@@ -20,7 +20,7 @@ from transformers import (
 )
 
 from data import *
-from pl_vocabulary_trf import (
+from tokenizer import (
     LabelTokenAligner,
     custom_tokenizer_from_pretrained,
 )

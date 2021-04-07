@@ -43,10 +43,10 @@ RUN pip install -r requirements.txt
 COPY run.sh /app/run.sh
 # COPY config.yaml .
 COPY data.py /app/data.py
-COPY pl_vocabulary_trf.py /app/pl_vocabulary_trf.py
+COPY tokenizer.py /app/tokenizer.py
 COPY pl_main.py /app/pl_main.py
 COPY pl_module_trf.py /app/pl_module_trf.py
-COPY pl_datamodule_trf.py /app/pl_datamodule_trf.py
+COPY datamodule.py /app/datamodule.py
 # CMD ["bash", "/app/run.sh"]
 
 COPY trf_main.py /app/trf_main.py
