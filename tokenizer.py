@@ -204,17 +204,22 @@ def custom_tokenizer_from_pretrained(
     """
 
     if os.path.exists(tokenizer_file_or_name):
-        tokenizer_dir = os.path.dirname(tokenizer_file_or_name)
-        pt_tokenizer = AutoTokenizer.from_pretrained(
-            tokenizer_dir,
-            cache_dir=cache_dir,
-        )
+        if not os.path.isdir(tokenizer_file_or_name):
+            tokenizer_dir = os.path.dirname(tokenizer_file_or_name)
+            pt_tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer_dir,
+                cache_dir=cache_dir,
+            )
 
-        # This is necessary for pt_tokenizer.save_pretrained(save_path)
-        _tokenizer = Tokenizer.from_file(tokenizer_file_or_name)
-        _tokenizer.pre_tokenizer = PreTokenizer.custom(MecabPreTokenizer())
-        pt_tokenizer._tokenizer = _tokenizer
-
+            # This is necessary for pt_tokenizer.save_pretrained(save_path)
+            _tokenizer = Tokenizer.from_file(tokenizer_file_or_name)
+            _tokenizer.pre_tokenizer = PreTokenizer.custom(MecabPreTokenizer())
+            pt_tokenizer._tokenizer = _tokenizer
+        else:
+            pt_tokenizer = AutoTokenizer.from_pretrained(
+                tokenizer_file_or_name,
+                cache_dir=cache_dir,
+            )
     else:
         # trf>=4.0.0: PreTrainedTokenizerFast by default
         # NOTE: AutoTokenizer doesn't load PreTrainedTokenizerFast...
