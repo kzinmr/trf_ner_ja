@@ -52,13 +52,6 @@ class TokenLabelPair:
         return self.token.end
 
 
-@dataclass
-class Chunk:
-    text: str
-    start_pos: int
-    label: TagType
-
-
 class FastEncoder:
     tokenizer: PreTrainedTokenizerFast
     max_length: int
