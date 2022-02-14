@@ -60,86 +60,23 @@ def seed_everything(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def align_tokens_with_words_bad(words: List[str], tokens: List[str]) -> List[int]:
-    """FastTokenizer の BatchEncoding.word_ids() をトークナイズ結果から計算."""
-    # 元の文の分かち書き(word)と、文窓の分かち書き(token)とが一致しないことがある
-
-    def _pairwise(iterable):
-        # pairwise('ABCDEFG') --> AB BC CD DE EF FG
-        a, b = tee(iterable)
-        next(b, None)
-        return zip(a, b)
-
-    def _normalize(t: str) -> str:
-        t = zen_to_han(t, kana=False, ascii=True, digit=True)
-        t = unicodedata.normalize("NFKD", t)
-        t = re.sub(" +", "", t)
-        return t
-
-    word_ids = [None]  # '[CLS]'
-    _cursor = 0
-    subword = ""
-    for tok, next_tok in _pairwise(tokens[1:]):
-        tok = _normalize(tok)
-        next_tok = _normalize(next_tok)
-        _word = words[_cursor]
-        _word = _normalize(_word)
-        if tok == _word and not next_tok.startswith("##"):
-            word_ids.append(_cursor)
-            _cursor += 1
-            subword = ""
-        elif _word.startswith(tok + re.sub("##", "", next_tok)):
-            subword = tok
-            word_ids.append(_cursor)
-        else:
-            if subword and subword + re.sub("##", "", tok) in _word:
-                subword = subword + re.sub("##", "", tok)
-                word_ids.append(_cursor)
-            else:
-                _cursor += 1
-                if _cursor < len(words):
-                    word_ids.append(_cursor)
-                    __word = words[_cursor]
-                    __word = _normalize(__word)
-                    if tok == __word or tok == "[UNK]":
-                        subword = ""
-                    elif __word.startswith(tok):
-                        subword = tok
-                    else:
-                        # print(tok, words[_cursor])
-                        # print(words)
-                        # print(tokens)
-                        raise ValueError(
-                            f"word-token alignment failed.. {_cursor} {tok} {words[_cursor]}"
-                        )
-                else:
-                    # print(words)
-                    # print(tokens)
-                    raise ValueError(
-                        f"word-token alignment failed.. {_cursor} {len(words)} {tok} {words[-1]}"
-                    )
-    word_ids.append(None)  # '[CLS]'
-    # assertionしたいが、正規化など含めて一致をとるのが手間なため省く
-    # for tok, wid in zip(tokens, word_ids):
-    #     assert wid is None or tok == '[UNK]' or tok.replace("##", "") in words[wid]
-    return word_ids
-
-
 def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     w2t, t2w = tokenizations.get_alignments(words, tokens[1:-1])
     word_ids = [None]
     prev_wid = 0
-    max_wid = max([wids[0] if len(wids)>0 else 0 for wids in t2w])
+    max_wid = max([wids[0] if len(wids) > 0 else 0 for wids in t2w])
     for wids in t2w:
         if len(wids) > 0:
             word_ids.append(wids[0])
             prev_wid = wids[0]
         else:
+            # [UNK] のケースはなるべく近いidで内挿する
             cur = min(max_wid, prev_wid + 1)
-            word_ids.append(cur)  # [UNK] のケース
-            prev_wid  += 1
+            word_ids.append(cur)
+            prev_wid += 1
     word_ids.append(None)
     return word_ids
+
 
 def tokenize_and_align_labels(
     examples: Dict[str, List[List]],
@@ -148,10 +85,10 @@ def tokenize_and_align_labels(
 ) -> BatchEncoding:
     """Tokenizer結果とPreTokenizer結果のラベルのアラインメントをとる."""
     # conll2003形式ではPreTokenize済みなため is_split_into_words=True
-    token_batches = examples["tokens"]
+    word_batches = examples["tokens"]
     label_batches = examples["ner_tags"]
     tokenized_inputs = tokenizer(
-        token_batches, truncation=True, is_split_into_words=True
+        word_batches, truncation=True, is_split_into_words=True
     )
 
     # word-token alignment は FastTokenizer経由しか使えない
@@ -163,17 +100,15 @@ def tokenize_and_align_labels(
         label_wids = zip(label_batches, word_ids_batches)
     else:
         # cl-tohoku のケース(WordPieceのprefixが ## であること)を想定した対応
-        subtokens_batches = [
+        tokens_batches = [
             tokenizer.convert_ids_to_tokens(ids)
             for ids in tokenized_inputs["input_ids"]
         ]
         # special_tokens = set(tokenizer.special_tokens_map.values())
         label_wids = []
-        for tokens, subtokens, tags in zip(
-            token_batches, subtokens_batches, label_batches
-        ):
-            assert len(tokens) == len(tags)
-            word_ids = align_tokens_with_words(tokens, subtokens)
+        for words, tokens, tags in zip(word_batches, tokens_batches, label_batches):
+            assert len(words) == len(tags)
+            word_ids = align_tokens_with_words(words, tokens)
             label_wids.append((tags, word_ids))
 
     label_ids_list = []
@@ -195,6 +130,11 @@ def tokenize_and_align_labels(
             previous_word_idx = word_idx
 
         label_ids_list.append(label_ids)
+
+    assert all(
+        len(ids) == len(lbs)
+        for ids, lbs in zip(tokenized_inputs["input_ids"], label_ids_list)
+    )
 
     tokenized_inputs["labels"] = label_ids_list
     return tokenized_inputs
