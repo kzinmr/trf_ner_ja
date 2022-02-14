@@ -57,22 +57,21 @@ def seed_everything(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def align_tokens_with_words(
-    words: List[str], tokens: List[str], special_tokens,
-) -> List[int]:
+def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     """FastTokenizer の BatchEncoding.word_ids() をトークナイズ結果から計算."""
+    special_tokens = ["[CLS]", "[SEP]"]
     word_ids = []
     _cursor = 0
-    subword = ''
+    subword = ""
     for tok in tokens:
-        tok = re.sub(' +', '', tok)
+        tok = re.sub(" +", "", tok)
         _word = words[_cursor]
         _word = zen_to_han(_word, kana=False, ascii=True, digit=True)
         if tok in special_tokens:
             word_ids.append(None)
         else:
             _word = words[_cursor]
-            if tok == _word:
+            if tok == _word or tok == "[UNK]":
                 word_ids.append(_cursor)
                 _cursor += 1
             elif _word.startswith(tok):
@@ -85,22 +84,26 @@ def align_tokens_with_words(
                 else:
                     _cursor += 1
                     __word = words[_cursor]
-                    __word = zen_to_han(__word, kana=False, ascii=True, digit=True)                    
-                    if tok == __word or __word.startswith(tok) or tok == '[UNK]':
-                        subword = ''
-        #                 while _cursor < len(words) and tok != words[_cursor]:
-        #                     _cursor += 1
+                    __word = zen_to_han(__word, kana=False, ascii=True, digit=True)
+                    if tok == __word or tok == "[UNK]" or __word.startswith(tok):
+                        subword = ""
+                        #                 while _cursor < len(words) and tok != words[_cursor]:
+                        #                     _cursor += 1
                         if _cursor < len(words):
                             word_ids.append(_cursor)
                         else:
                             print(words)
                             print(tokens)
-                            raise ValueError(f"word-token alignment failed.. {_cursor} {len(words)} {tok} {words[-1]}")
+                            raise ValueError(
+                                f"word-token alignment failed.. {_cursor} {len(words)} {tok} {words[-1]}"
+                            )
                     else:
                         print(tok, words[_cursor])
                         print(words)
-                        print(tokens)                        
-                        raise ValueError(f"word-token alignment failed.. {_cursor} {tok} {words[_cursor]}")
+                        print(tokens)
+                        raise ValueError(
+                            f"word-token alignment failed.. {_cursor} {tok} {words[_cursor]}"
+                        )
 
     # assertionしたいが、正規化など含めて一致をとるのが手間なため省く
     # for tok, wid in zip(tokens, word_ids):
@@ -133,9 +136,9 @@ def tokenize_and_align_labels(
             tokenizer.convert_ids_to_tokens(ids)
             for ids in tokenized_inputs["input_ids"]
         ]
-        special_tokens = set(tokenizer.special_tokens_map.values())
+        # special_tokens = set(tokenizer.special_tokens_map.values())
         word_ids_batches = [
-            align_tokens_with_words(tokens, subtokens, special_tokens)
+            align_tokens_with_words(tokens, subtokens)
             for tokens, subtokens in zip(token_batches, subtokens_batches)
         ]
 
