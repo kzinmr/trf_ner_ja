@@ -304,7 +304,7 @@ if __name__ == "__main__":
         tokenizer,
         padding="max_length",
         max_length=MAX_LENGTH,
-        pad_to_multiple_of=8,
+        # pad_to_multiple_of=8,
         label_pad_token_id=-100,
         return_tensors="pt",
     )
