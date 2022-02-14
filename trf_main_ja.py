@@ -88,7 +88,7 @@ def tokenize_and_align_labels(
     word_batches = examples["tokens"]
     label_batches = examples["ner_tags"]
     tokenized_inputs = tokenizer(
-        word_batches, truncation=True, is_split_into_words=True
+        word_batches, truncation=True, is_split_into_words=True, return_tensors="pt"
     )
 
     # word-token alignment は FastTokenizer経由しか使えない
@@ -136,7 +136,7 @@ def tokenize_and_align_labels(
         for ids, lbs in zip(tokenized_inputs["input_ids"], label_ids_list)
     )
 
-    tokenized_inputs["labels"] = label_ids_list
+    tokenized_inputs["labels"] = torch.Tensor(label_ids_list)
     return tokenized_inputs
 
 
