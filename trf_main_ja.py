@@ -88,7 +88,7 @@ def align_tokens_with_words(
 
 
 def tokenize_and_align_labels(
-    examples: Dict[str, list],
+    examples: Dict[str, list[list]],
     tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
     label_all_tokens=True,
 ) -> BatchEncoding:
@@ -172,9 +172,9 @@ class QuasiCoNLL2003TokenClassificationFeatures:
         self.tokenizer = tokenizer
         self.label_all_tokens = label_all_tokens
 
-        _train = dataset.train
-        _valid = dataset.validation
-        _test = dataset.test
+        _train = dataset.train_batch
+        _valid = dataset.validation_batch
+        _test = dataset.test_batch
         _train_tokenized = map(self._tokenize_and_align_labels, _train)
         _valid_tokenized = map(self._tokenize_and_align_labels, _valid)
         _test_tokenized = map(self._tokenize_and_align_labels, _test)
@@ -214,7 +214,7 @@ class QuasiCoNLL2003TokenClassificationFeatures:
             for d in _test_tokenized
         ]
 
-    def _tokenize_and_align_labels(self, examples):
+    def _tokenize_and_align_labels(self, examples: Dict[str, list[list]]):
         return tokenize_and_align_labels(
             examples,
             self.tokenizer,

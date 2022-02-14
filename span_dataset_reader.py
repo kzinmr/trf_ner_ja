@@ -235,6 +235,34 @@ class QuasiDataset:
         self.label2id = label2id
 
     @staticmethod
+    def make_batch(data: List[Dict[str, Union[int, List[str]]]], batch_size: int) -> List[Dict[str, Union[List[int], List[List[str]]]]]:
+        n_data = len(data)
+        batched_data = []
+        for i in range(n_data, batch_size):
+            batch = data[i: i+batch_size]
+            batched_data.append({
+                "id": [d["id"] for d in batch],
+                "tokens": [d["tokens"] for d in batch],
+                "labels": [d["labels"] for d in batch],
+                "ner_tags": [d["ner_tags"] for d in batch],
+            })
+        return batched_data
+
+
+    @property
+    def train_batch(self, batch_size: int) ->  List[Dict[str, Union[List[int], List[List[str]]]]]:
+        return self.make_batch(self.train, batch_size)
+
+    @property
+    def validation_batch(self, batch_size: int) ->  List[Dict[str, Union[List[int], List[List[str]]]]]:
+        return self.make_batch(self.validation, batch_size)
+
+    @property
+    def test_batch(self, batch_size: int) ->  List[Dict[str, Union[List[int], List[List[str]]]]]:
+        return self.make_batch(self.test, batch_size)
+
+
+    @staticmethod
     def load_from_span_dataset_whole(
         filepath: str,
         valid_ratio=0.2,
