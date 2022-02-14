@@ -74,53 +74,49 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
         t = re.sub(" +", "", t)
         return t
 
-    special_tokens = ["[CLS]", "[SEP]"]
-    word_ids = []
+    word_ids = [None]  # '[CLS]'
     _cursor = 0
     subword = ""
-    for tok, next_tok in _pairwise(tokens):
-        if tok in special_tokens:
-            word_ids.append(None)
+    for tok, next_tok in _pairwise(tokens[1:]):
+        tok = _normalize(tok)
+        next_tok = _normalize(next_tok)
+        _word = words[_cursor]
+        _word = _normalize(_word)
+        if tok == _word and not next_tok.startswith("##"):
+            word_ids.append(_cursor)
+            _cursor += 1
+            subword = ""
+        elif _word.startswith(tok + re.sub("##", "", next_tok)):
+            subword = tok
+            word_ids.append(_cursor)
         else:
-            tok = _normalize(tok)
-            next_tok = _normalize(next_tok)
-            _word = words[_cursor]
-            _word = _normalize(_word)
-            if tok == _word and not next_tok.startswith("##"):
-                word_ids.append(_cursor)
-                _cursor += 1
-                subword = ""
-            elif _word.startswith(tok + re.sub("##", "", next_tok)):
-                subword = tok
+            if subword and subword + re.sub("##", "", tok) in _word:
+                subword = subword + re.sub("##", "", tok)
                 word_ids.append(_cursor)
             else:
-                if subword and subword + re.sub("##", "", tok) in _word:
-                    subword = subword + re.sub("##", "", tok)
+                _cursor += 1
+                if _cursor < len(words):
                     word_ids.append(_cursor)
-                else:
-                    _cursor += 1
-                    if _cursor < len(words):
-                        word_ids.append(_cursor)
-                        __word = words[_cursor]
-                        __word = _normalize(__word)
-                        if tok == __word or tok == "[UNK]":
-                            subword = ""
-                        elif __word.startswith(tok):
-                            subword = tok
-                        else:
-                            # print(tok, words[_cursor])
-                            # print(words)
-                            # print(tokens)
-                            raise ValueError(
-                                f"word-token alignment failed.. {_cursor} {tok} {words[_cursor]}"
-                            )
+                    __word = words[_cursor]
+                    __word = _normalize(__word)
+                    if tok == __word or tok == "[UNK]":
+                        subword = ""
+                    elif __word.startswith(tok):
+                        subword = tok
                     else:
+                        # print(tok, words[_cursor])
                         # print(words)
                         # print(tokens)
                         raise ValueError(
-                            f"word-token alignment failed.. {_cursor} {len(words)} {tok} {words[-1]}"
+                            f"word-token alignment failed.. {_cursor} {tok} {words[_cursor]}"
                         )
-
+                else:
+                    # print(words)
+                    # print(tokens)
+                    raise ValueError(
+                        f"word-token alignment failed.. {_cursor} {len(words)} {tok} {words[-1]}"
+                    )
+    word_ids.append(None)  # '[CLS]'
     # assertionしたいが、正規化など含めて一致をとるのが手間なため省く
     # for tok, wid in zip(tokens, word_ids):
     #     assert wid is None or tok == '[UNK]' or tok.replace("##", "") in words[wid]
