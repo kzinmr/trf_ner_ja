@@ -150,6 +150,7 @@ def tokenize_and_align_labels(
             tokenized_inputs.word_ids(batch_index=i)
             for i, _ in enumerate(label_batches)
         ]
+        label_wids = zip(label_batches, word_ids_batches)
     else:
         # cl-tohoku のケース(WordPieceのprefixが ## であること)を想定した対応
         subtokens_batches = [
@@ -157,13 +158,17 @@ def tokenize_and_align_labels(
             for ids in tokenized_inputs["input_ids"]
         ]
         # special_tokens = set(tokenizer.special_tokens_map.values())
-        word_ids_batches = [
-            align_tokens_with_words(tokens, subtokens)
-            for tokens, subtokens in zip(token_batches, subtokens_batches)
-        ]
+        label_wids = []
+        for tokens, subtokens, tags in zip(token_batches, subtokens_batches, label_batches):
+            try:
+                word_ids = align_tokens_with_words(tokens, subtokens)
+                label_wids.append((tags, word_ids))
+            except ValueError:
+                continue
+
 
     label_ids_list = []
-    for tags, word_ids in zip(label_batches, word_ids_batches):
+    for tags, word_ids in label_wids:
         previous_word_idx = None
         label_ids = []
         for word_idx in word_ids:
