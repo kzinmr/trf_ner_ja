@@ -145,7 +145,7 @@ class Span2TokenConverter:
 def window_token_labels(
     sentence,
     max_length: int = 128,
-    window_stride: int = 5,
+    window_stride: int = 32,
 ):
     """ 一文のデータが長い場合にストライド付き固定長分割を施す処理.
     """
