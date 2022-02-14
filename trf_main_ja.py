@@ -155,6 +155,7 @@ class QuasiCoNLL2003TokenClassificationFeatures:
         dataset: QuasiDataset,
         tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
         label_all_tokens=True,
+        batch_size=32
     ):
         """
         Build features for transformers.
@@ -172,9 +173,9 @@ class QuasiCoNLL2003TokenClassificationFeatures:
         self.tokenizer = tokenizer
         self.label_all_tokens = label_all_tokens
 
-        _train = dataset.train_batch
-        _valid = dataset.validation_batch
-        _test = dataset.test_batch
+        _train = dataset.train_batch(batch_size)
+        _valid = dataset.validation_batch(batch_size)
+        _test = dataset.test_batch(batch_size)
         _train_tokenized = map(self._tokenize_and_align_labels, _train)
         _valid_tokenized = map(self._tokenize_and_align_labels, _valid)
         _test_tokenized = map(self._tokenize_and_align_labels, _test)

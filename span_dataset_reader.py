@@ -249,15 +249,12 @@ class QuasiDataset:
         return batched_data
 
 
-    @property
     def train_batch(self, batch_size: int) ->  List[Dict[str, Union[List[int], List[List[str]]]]]:
         return self.make_batch(self.train, batch_size)
 
-    @property
     def validation_batch(self, batch_size: int) ->  List[Dict[str, Union[List[int], List[List[str]]]]]:
         return self.make_batch(self.validation, batch_size)
 
-    @property
     def test_batch(self, batch_size: int) ->  List[Dict[str, Union[List[int], List[List[str]]]]]:
         return self.make_batch(self.test, batch_size)
 
