@@ -238,7 +238,7 @@ class QuasiDataset:
     def make_batch(data: List[Dict[str, Union[int, List[str]]]], batch_size: int) -> List[Dict[str, Union[List[int], List[List[str]]]]]:
         n_data = len(data)
         batched_data = []
-        for i in range(n_data, batch_size):
+        for i in range(0, n_data, batch_size):
             batch = data[i: i+batch_size]
             batched_data.append({
                 "id": [d["id"] for d in batch],
@@ -266,6 +266,8 @@ class QuasiDataset:
         test_ratio=0.2
     ):
         dataset_whole = read_span_dataset(filepath)
+        print("Loading jsonl files...")
+        print(len(dataset_whole))
         label_set = {t_l.label for tls in dataset_whole for t_l in tls}
         label_list = sorted(label_set, key=bio_sorter)
         id2label = dict(enumerate(label_list))
@@ -292,6 +294,7 @@ class QuasiDataset:
         dataset_train = read_span_dataset(train_filepath)
         dataset_valid = read_span_dataset(valid_filepath)
         dataset_test = read_span_dataset(test_filepath)
+        print("Loading jsonl files...")
         print(len(dataset_train), len(dataset_valid), len(dataset_test))
 
         _label_set_train = {t_l.label for tls in dataset_train for t_l in tls}
