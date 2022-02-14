@@ -62,6 +62,7 @@ def seed_everything(seed):
 
 def align_tokens_with_words_bad(words: List[str], tokens: List[str]) -> List[int]:
     """FastTokenizer の BatchEncoding.word_ids() をトークナイズ結果から計算."""
+    # 元の文の分かち書き(word)と、文窓の分かち書き(token)とが一致しないことがある
 
     def _pairwise(iterable):
         # pairwise('ABCDEFG') --> AB BC CD DE EF FG
@@ -169,12 +170,12 @@ def tokenize_and_align_labels(
         for tokens, subtokens, tags in zip(
             token_batches, subtokens_batches, label_batches
         ):
-            try:
-                word_ids = align_tokens_with_words(tokens, subtokens)
-                label_wids.append((tags, word_ids))
-            except ValueError:
-                # 元の文の分かち書き(word)と、文窓の分かち書き(token)とが一致しないことがある
-                continue
+            if len(tokens) != len(tags):
+                print(len(tokens), len(tags))
+                print(tokens)
+                print(tags)
+            word_ids = align_tokens_with_words(tokens, subtokens)
+            label_wids.append((tags, word_ids))
 
     label_ids_list = []
     for tags, word_ids in label_wids:
