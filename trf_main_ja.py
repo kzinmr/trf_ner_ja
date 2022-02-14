@@ -75,9 +75,12 @@ def align_tokens_with_words(
                     word_ids.append(_cursor)
                 else:
                     _cursor += 1
-                    while tok != words[_cursor]:
+                    while _cursor < len(words) and tok != words[_cursor]:
                         _cursor += 1
-                    word_ids.append(_cursor)
+                    if _cursor < len(words):
+                        word_ids.append(_cursor)
+                    else:
+                        break
     # assertion
     for tok, wid in zip(tokens, word_ids):
         assert words[wid] is None or tok.replace("##", "") in words[wid]
