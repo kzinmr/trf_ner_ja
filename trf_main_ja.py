@@ -332,7 +332,7 @@ if __name__ == "__main__":
     # DataCollatorForTokenClassification:
     # - 各バッチサンプルに対して tokenizer.pad() が呼ばれ、torch.Tensorが返される
     # - バッチ内のトークン単位ラベルも処理される (See. DataCollatorWithPadding)
-    data_collator = DataCollatorForTokenClassification(tokenizer, padding=True, max_length=self.max_length)
+    data_collator = DataCollatorForTokenClassification(tokenizer)
     trainer = Trainer(
         model,
         args,
