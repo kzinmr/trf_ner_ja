@@ -17,7 +17,7 @@ from transformers import (
 )
 
 from predictor_ja import TrfNERSlow
-from span_dataset_reader import QuasiDataset
+from span_dataset_reader import DatasetPath, QuasiDataset
 
 metric = load_metric("seqeval")
 
@@ -240,14 +240,21 @@ def predict(trainer, test_dataset):
 if __name__ == "__main__":
 
     data_dir = "/app/workspace/"
+    is_splitted = True
 
     model_checkpoint = "cl-tohoku/bert-base-japanese-v2"
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
 
-    filename = os.path.join(data_dir, "dataset.jsonl")
-    dataset = QuasiDataset.load_from_span_dataset(
-        filename, valid_ratio=0.2, test_ratio=0.2
-    )
+    if is_splitted:
+        train = os.path.join(data_dir, "train.jsonl")
+        valid = os.path.join(data_dir, "valid.jsonl")
+        test = os.path.join(data_dir, "test.jsonl")
+        pathinfo = DatasetPath(train=train, validation=valid, test=test)
+    else:
+        filename = os.path.join(data_dir, "dataset.jsonl")
+        pathinfo = DatasetPath(whole=filename, validation_ratio=0.2, test_ratio=0.2)
+
+    dataset = QuasiDataset.load_from_span_dataset(pathinfo)
 
     # NOTE: CoNLL2003ではデータセット側で長さの調整（window処理）は事前に済ませてあると想定
     features = QuasiCoNLL2003TokenClassificationFeatures(

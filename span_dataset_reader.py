@@ -7,6 +7,15 @@ import fugashi
 import unidic_lite
 from sklearn.model_selection import train_test_split
 
+@dataclass
+class DatasetPath:
+    whole: Optional[str] = None
+    train: Optional[str] = None
+    validation: Optional[str] = None
+    test: Optional[str] = None
+    validation_ratio: Optional[float] = None
+    test_ratio: Optional[float] = None
+
 
 @dataclass
 class Token:
@@ -209,11 +218,30 @@ class QuasiDataset:
 
     def __init__(
         self,
-        dataset: List[List[TokenLabelPair]],
-        valid_ratio: float = 0.2,
-        test_ratio: float = 0.2
+        train_dataset: List[Dict[str, Union[int, List[str]]]],
+        validation_dataset: List[Dict[str, Union[int, List[str]]]],
+        test_dataset: List[Dict[str, Union[int, List[str]]]],
+        label_list: List[str]
     ):
-        label_set = {d.label for ds in dataset for d in ds}
+        label_list = sorted(label_list, key=bio_sorter)
+        id2label = dict(enumerate(label_list))
+        label2id = {l: i for i, l in id2label.items()}
+
+        self.train = train_dataset
+        self.validation = validation_dataset
+        self.test = test_dataset
+        self.label_list = label_list
+        self.id2label = id2label
+        self.label2id = label2id
+
+    @staticmethod
+    def load_from_span_dataset_whole(
+        filepath: str,
+        valid_ratio=0.2,
+        test_ratio=0.2
+    ):
+        dataset_whole = read_span_dataset(filepath)
+        label_set = {t_l.label for tls in dataset_whole for t_l in tls}
         label_list = sorted(label_set, key=bio_sorter)
         id2label = dict(enumerate(label_list))
         label2id = {l: i for i, l in id2label.items()}
@@ -225,24 +253,69 @@ class QuasiDataset:
                 'labels': [t_l.label for t_l in token_labels],
                 'ner_tags': [label2id[t_l.label] for t_l in token_labels]
             }
-            for i, token_labels in enumerate(dataset)
+            for i, token_labels in enumerate(dataset_whole)
         ]
         train, valid, test = train_valid_test_split(all_dataset, valid_ratio, test_ratio)
-        self.train = train
-        self.validation = valid
-        self.test = test
-        self.label_list = label_list
-        self.id2label = id2label
-        self.label2id = label2id
+        return QuasiDataset(train, valid, test, label_list)
 
     @staticmethod
-    def load_from_span_dataset(
-        filepath: str,
-        valid_ratio=0.2,
-        test_ratio=0.2
+    def load_from_span_dataset_split(
+        train_filepath: str,
+        valid_filepath: str,
+        test_filepath: str,
     ):
-        dataset_all = read_span_dataset(filepath)
-        return QuasiDataset(dataset_all, valid_ratio, test_ratio)
+        dataset_train = read_span_dataset(train_filepath)
+        dataset_valid = read_span_dataset(valid_filepath)
+        dataset_test = read_span_dataset(test_filepath)
+
+        _label_set_train = {t_l.label for tls in dataset_train for t_l in tls}
+        _label_set_valid = {t_l.label for tls in dataset_valid for t_l in tls}
+        _label_set_test = {t_l.label for tls in dataset_test for t_l in tls}
+        label_set = _label_set_train & _label_set_valid & _label_set_test
+        label_list = sorted(label_set, key=bio_sorter)
+        id2label = dict(enumerate(label_list))
+        label2id = {l: i for i, l in id2label.items()}
+
+        train = [
+            {
+                'id': i,
+                'tokens': [t_l.token for t_l in token_labels],
+                'labels': [t_l.label for t_l in token_labels],
+                'ner_tags': [label2id[t_l.label] for t_l in token_labels]
+            }
+            for i, token_labels in enumerate(dataset_train)
+        ]
+        n_train = len(train)
+        valid = [
+            {
+                'id': i,
+                'tokens': [t_l.token for t_l in token_labels],
+                'labels': [t_l.label for t_l in token_labels],
+                'ner_tags': [label2id[t_l.label] for t_l in token_labels]
+            }
+            for i, token_labels in enumerate(dataset_valid, n_train)
+        ]
+        n_valid = len(valid)
+        test = [
+            {
+                'id': i,
+                'tokens': [t_l.token for t_l in token_labels],
+                'labels': [t_l.label for t_l in token_labels],
+                'ner_tags': [label2id[t_l.label] for t_l in token_labels]
+            }
+            for i, token_labels in enumerate(dataset_test, n_train + n_valid)
+        ]
+
+        return QuasiDataset(train, valid, test, label_list)
+
+    @classmethod
+    def load_from_span_dataset(cls, config: DatasetPath):
+        if config.whole and config.validation_ratio and config.test_ratio:
+            return cls.load_from_span_dataset_whole(config.whole, config.validation_ratio, config.test_ratio)
+        elif config.train and config.validation and config.test:
+            return cls.load_from_span_dataset_split(config.train, config.validation, config.test)
+        else:
+            raise ValueError("DatasetPath attributes are not properly set")
 
     def export_token_label_dataset(
         self, delimiter: str = "\t"
