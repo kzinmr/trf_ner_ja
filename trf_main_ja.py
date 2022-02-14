@@ -2,12 +2,13 @@ from multiprocessing.sharedctypes import Value
 import os
 import random
 import re
-from mojimoji import zen_to_han
+from itertools import tee
 from typing import Dict, List, Union
 
 import numpy as np
 import torch
 from datasets import load_metric
+from mojimoji import zen_to_han
 from transformers import (
     AutoModelForTokenClassification,
     AutoTokenizer,
@@ -57,13 +58,19 @@ def seed_everything(seed):
     torch.backends.cudnn.deterministic = True
 
 
+def pairwise(iterable):
+    # pairwise('ABCDEFG') --> AB BC CD DE EF FG
+    a, b = tee(iterable)
+    next(b, None)
+    return zip(a, b)
+
 def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     """FastTokenizer の BatchEncoding.word_ids() をトークナイズ結果から計算."""
     special_tokens = ["[CLS]", "[SEP]"]
     word_ids = []
     _cursor = 0
     subword = ""
-    for tok in tokens:
+    for tok, next_tok in pairwise(tokens):
         tok = re.sub(" +", "", tok)
         _word = words[_cursor]
         _word = zen_to_han(_word, kana=False, ascii=True, digit=True)
@@ -71,10 +78,10 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
             word_ids.append(None)
         else:
             _word = words[_cursor]
-            if tok == _word or tok == "[UNK]":
+            if tok == _word:
                 word_ids.append(_cursor)
                 _cursor += 1
-            elif _word.startswith(tok):
+            elif _word.startswith(tok + next_tok.replace("##", "")):
                 subword = tok
                 word_ids.append(_cursor)
             else:
