@@ -159,6 +159,7 @@ class QuasiCoNLL2003TokenClassificationFeatures:
     ) -> BatchEncoding:
         """Tokenizer結果とPreTokenizer結果のラベルのアラインメントをとる."""
         # conll2003形式ではPreTokenize済みなため is_split_into_words=True
+        # collatorでコケるのでpadding="max_length"で固定長化している
         word_batches = examples["tokens"]
         label_batches = examples["ner_tags"]
         tokenized_inputs = tokenizer(
@@ -274,6 +275,7 @@ if __name__ == "__main__":
     dataset = QuasiDataset.load_from_span_dataset(pathinfo)
 
     # NOTE: CoNLL2003ではデータセット側で長さの調整（window処理）は事前に済ませてあると想定
+    # 事前に長さ調整しないことでコード側の配慮が相当増える
     features = QuasiCoNLL2003TokenClassificationFeatures(
         dataset, tokenizer, label_all_tokens=True
     )
@@ -299,7 +301,7 @@ if __name__ == "__main__":
         learning_rate=2e-5,
         per_device_train_batch_size=16,
         per_device_eval_batch_size=16,
-        num_train_epochs=1,
+        num_train_epochs=3,
         weight_decay=0.01,
         # dataloader_drop_last=True,
     )
