@@ -15,6 +15,8 @@ from transformers import (
     TrainingArguments,
 )
 
+from predictor_en import TrfNERFast
+
 
 metric = load_metric("seqeval")
 
@@ -181,6 +183,11 @@ def predict(trainer, test_dataset):
     true_labels = [[label_list[l] for l in label if l != -100] for label in labels]
     # 予測だけだと label_id==-100 が確約できないため、先頭に [CLS] 末尾に [SEP] が来る事実を用いる
     true_predictions = [[label_list[p] for p in preds[1:-1]] for preds in predictions]
+    for ps, ls in zip(true_predictions, true_labels):
+        if len(ps) != len(ls):
+            print(ls)
+            print(ps)
+
     assert all(len(ps) == len(ls) for ps, ls in zip(true_predictions, true_labels))
     input_tokens = [tokenizer.convert_ids_to_tokens(ids[1:-1]) for ids in input_ids]
     return input_tokens, true_predictions, true_labels
@@ -229,11 +236,12 @@ if __name__ == "__main__":
         compute_metrics=compute_metrics,
     )
 
-    trainer.train()
+    # trainer.train()
 
-    trainer.evaluate()
+    # trainer.evaluate()
 
-    trainer.save_model(data_dir)
+    # trainer.save_model(data_dir)
+    # TrfNERFast.pickle_bert_model(data_dir, os.path.join(data_dir, "predictor_en.pkl"))
 
     # prediction
     input_tokens, true_predictions, true_labels = predict(trainer, test_dataset)

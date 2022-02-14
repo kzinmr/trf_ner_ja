@@ -14,7 +14,6 @@ from transformers import (
     BatchEncoding,
     DataCollatorWithPadding,
     PreTrainedTokenizerFast,
-    TokenClassifierOutput,
 )
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -198,7 +197,7 @@ class Decoder:
         self,
         sentence_text: str,
         offset_mapping: List[List[Tuple[int, int]]],
-        outputs: List[TokenClassifierOutput],
+        outputs: List,
     ) -> List[TokenLabelPair]:
         # decode logits into label ids
         batch_label_ids = [
@@ -243,7 +242,7 @@ class Predictor:
         self.batch_size = batch_size
         self.max_length = max_length
 
-    def predict(self, dataset: List[dict]) -> List[TokenClassifierOutput]:
+    def predict(self, dataset: List[dict]) -> List:
         """ Dataset(Tensor) から Dataloader を構成し、数値予測を行う. """
 
         # 予測なのでシャッフルなしのサンプラーを使用
