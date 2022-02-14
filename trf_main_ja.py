@@ -89,10 +89,8 @@ def tokenize_and_align_labels(
     label_batches = examples["ner_tags"]
     tokenized_inputs = tokenizer(
         word_batches,
-        padding=True,
         truncation=True,
         is_split_into_words=True,
-        return_tensors="pt",
     )
 
     # word-token alignment は FastTokenizer経由しか使えない
