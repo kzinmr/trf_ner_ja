@@ -77,65 +77,6 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     return word_ids
 
 
-def tokenize_and_align_labels(
-    examples: Dict[str, List[List]],
-    tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
-    label_all_tokens=True,
-) -> BatchEncoding:
-    """Tokenizer結果とPreTokenizer結果のラベルのアラインメントをとる."""
-    # conll2003形式ではPreTokenize済みなため is_split_into_words=True
-    word_batches = examples["tokens"]
-    label_batches = examples["ner_tags"]
-    tokenized_inputs = tokenizer(
-        word_batches, truncation=True, is_split_into_words=True
-    )
-    # word-token alignment は FastTokenizer経由しか使えない
-    if tokenizer.is_fast:
-        word_ids_batches = [
-            tokenized_inputs.word_ids(batch_index=i)
-            for i, _ in enumerate(label_batches)
-        ]
-        label_wids = zip(label_batches, word_ids_batches)
-    else:
-        tokens_batches = [
-            tokenizer.convert_ids_to_tokens(ids)
-            for ids in tokenized_inputs["input_ids"]
-        ]
-        label_wids = []
-        for words, tokens, tags in zip(word_batches, tokens_batches, label_batches):
-            assert len(words) == len(tags)
-            word_ids = align_tokens_with_words(words, tokens)
-            label_wids.append((tags, word_ids))
-
-    label_ids_list = []
-    for tags, word_ids in label_wids:
-        previous_word_idx = None
-        label_ids = []
-        for word_idx in word_ids:
-            # Special tokens have a word id that is None.
-            # We set the label to -100 so they are automatically ignored in the loss function.
-            if word_idx is None:
-                label_ids.append(-100)
-            # We set the label for the first token of each word.
-            elif word_idx != previous_word_idx:
-                label_ids.append(tags[word_idx])
-            # For the other tokens in a word, we set the label to either the current label or -100,
-            # NOTE: チャンク先頭の単語がsubtoken化されると、 B-PERSON, B-PERSON と続いたりする
-            else:
-                label_ids.append(tags[word_idx] if label_all_tokens else -100)
-            previous_word_idx = word_idx
-
-        label_ids_list.append(label_ids)
-
-    assert all(
-        len(ids) == len(lbs)
-        for ids, lbs in zip(tokenized_inputs["input_ids"], label_ids_list)
-    )
-
-    tokenized_inputs["labels"] = label_ids_list
-    return tokenized_inputs
-
-
 class QuasiCoNLL2003TokenClassificationFeatures:
     train_datasets: List[Dict]
     val_datasets: List[Dict]
@@ -210,8 +151,85 @@ class QuasiCoNLL2003TokenClassificationFeatures:
             )
         ]
 
+    def tokenize_and_align_labels(
+        self,
+        examples: Dict[str, List[List]],
+        tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
+        label_all_tokens=True,
+    ) -> BatchEncoding:
+        """Tokenizer結果とPreTokenizer結果のラベルのアラインメントをとる."""
+        # conll2003形式ではPreTokenize済みなため is_split_into_words=True
+        word_batches = examples["tokens"]
+        label_batches = examples["ner_tags"]
+        tokenized_inputs = tokenizer(
+            word_batches,
+            padding="max_length",
+            max_length=MAX_LENGTH,
+            truncation=True,
+            is_split_into_words=True,
+        )
+        # word-token alignment は FastTokenizer経由しか使えない
+        if tokenizer.is_fast:
+            word_ids_batches = [
+                tokenized_inputs.word_ids(batch_index=i)
+                for i, _ in enumerate(label_batches)
+            ]
+            label_wids = zip(label_batches, word_ids_batches)
+        else:
+            tokens_batches = [
+                tokenizer.convert_ids_to_tokens(ids)
+                for ids in tokenized_inputs["input_ids"]
+            ]
+            label_wids = []
+            for words, tokens, tags in zip(word_batches, tokens_batches, label_batches):
+                assert len(words) == len(tags)
+                word_ids = align_tokens_with_words(words, tokens)
+                label_wids.append((tags, word_ids))
+
+        label_ids_list = []
+        for tags, word_ids in label_wids:
+            previous_word_idx = None
+            previous_label = None
+            label_ids = []
+            for word_idx in word_ids:
+                # Special tokens have a word id that is None.
+                # We set the label to -100 so they are automatically ignored in the loss function.
+                if word_idx is None:
+                    tag = -100
+                # We set the label for the first token of each word.
+                elif word_idx != previous_word_idx:
+                    tag = tags[word_idx]
+                # For the other tokens in a word, we set the label to either the current label or -100,
+                else:
+                    if label_all_tokens:
+                        tag = tags[word_idx]
+                        current = self.id2label[tag]
+                        # チャンク先頭の単語がsubtokenで B-xxx開始ならI-xxxを続ける
+                        if (
+                            current.startswith("B")
+                            and previous_label
+                            and previous_label.startswith("B")
+                        ):
+                            label = "I-" + previous_label.split("-")[1]
+                            tag = self.label2id[label]
+                    else:
+                        tag = -100
+                label_ids.append(tag)
+                previous_word_idx = word_idx
+                previous_label = self.id2label[tag]
+
+            label_ids_list.append(label_ids)
+
+        assert all(
+            len(ids) == len(lbs)
+            for ids, lbs in zip(tokenized_inputs["input_ids"], label_ids_list)
+        )
+
+        tokenized_inputs["labels"] = label_ids_list
+        return tokenized_inputs
+
     def _tokenize_and_align_labels(self, examples: Dict[str, List[List]]):
-        return tokenize_and_align_labels(
+        return self.tokenize_and_align_labels(
             examples,
             self.tokenizer,
             self.label_all_tokens,
