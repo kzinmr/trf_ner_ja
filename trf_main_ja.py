@@ -1,3 +1,4 @@
+from multiprocessing.sharedctypes import Value
 import os
 import random
 from typing import Dict, List, Union
@@ -80,10 +81,12 @@ def align_tokens_with_words(
                     if _cursor < len(words):
                         word_ids.append(_cursor)
                     else:
-                        break
+                        print(words)
+                        print(tokens)
+                        raise ValueError("word-token alignment failed..")
     # assertion
     for tok, wid in zip(tokens, word_ids):
-        assert words[wid] is None or tok.replace("##", "") in words[wid]
+        assert wid is None or tok.replace("##", "") in words[wid]
     return word_ids
 
 
