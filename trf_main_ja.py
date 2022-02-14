@@ -25,6 +25,8 @@ from transformers import (
 from predictor_ja import TrfNERSlow
 from span_dataset_reader import DatasetPath, QuasiDataset
 
+MAX_LENGTH = 128
+
 metric = load_metric("seqeval")
 
 
@@ -90,7 +92,7 @@ def tokenize_and_align_labels(
     tokenized_inputs = tokenizer(
         word_batches,
         truncation=True,
-        max_length=128,
+        max_length=MAX_LENGTH,
         is_split_into_words=True,
     )
 
@@ -290,10 +292,11 @@ if __name__ == "__main__":
     # DataCollatorForTokenClassification:
     # - 各バッチサンプルに対して tokenizer.pad() が呼ばれ、torch.Tensorが返される
     # - バッチ内のトークン単位ラベルも処理される (See. DataCollatorWithPadding)
+    print(train_dataset[0]["input_ids"])
     data_collator = DataCollatorForTokenClassification(
         tokenizer,
         padding="max_length",
-        max_length=128,
+        max_length=MAX_LENGTH,
         pad_to_multiple_of=8,
         label_pad_token_id=-100,
         return_tensors="pt",
