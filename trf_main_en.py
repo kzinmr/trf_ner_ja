@@ -236,6 +236,7 @@ if __name__ == "__main__":
         compute_metrics=compute_metrics,
     )
 
+    # Avoid the default "LABEL_0"-style labeling
     label2id = {label: i for i, label in enumerate(label_list)}
     id2label = {v: k for k, v in label2id.items()}
     trainer.model.config.label2id = label2id
