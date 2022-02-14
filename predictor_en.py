@@ -70,7 +70,7 @@ class FastEncoder:
         # sentence -> [sentence_window(max_length, window_stride)]
         enc: BatchEncoding = self.tokenizer(
             sentence_text,
-            padding=True,
+            padding="max_length",
             truncation=True,
             max_length=self.max_length,
             stride=self.window_stride,
