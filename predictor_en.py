@@ -1,7 +1,6 @@
 import os
 import pickle
-from dataclasses import dataclass, field
-from enum import Enum
+from dataclasses import dataclass
 from itertools import chain, tee
 from typing import Dict, List, Tuple
 
@@ -15,7 +14,7 @@ from transformers import (
     DataCollatorWithPadding,
     PreTrainedTokenizerFast,
 )
-from trf_main_en import CoNLL2003TokenClassificationFeatures
+
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
