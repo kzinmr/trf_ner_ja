@@ -146,9 +146,9 @@ def tokenize_and_align_labels(
 
 
 class QuasiCoNLL2003TokenClassificationFeatures:
-    train_datasets: List[Dict[str, int]]
-    val_datasets: List[Dict[str, int]]
-    test_datasets: List[Dict[str, int]]
+    train_datasets: List[Dict]
+    val_datasets: List[Dict]
+    test_datasets: List[Dict]
     label_list: List[str]
     id2label: Dict[int, str]
     label2id: Dict[str, int]
@@ -292,7 +292,7 @@ if __name__ == "__main__":
     # DataCollatorForTokenClassification:
     # - 各バッチサンプルに対して tokenizer.pad() が呼ばれ、torch.Tensorが返される
     # - バッチ内のトークン単位ラベルも処理される (See. DataCollatorWithPadding)
-    print(train_dataset[0]["input_ids"])
+    print([type(d["input_ids"]) for d in train_dataset])
     data_collator = DataCollatorForTokenClassification(
         tokenizer,
         padding="max_length",
