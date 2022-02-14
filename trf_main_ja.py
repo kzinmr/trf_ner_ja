@@ -79,7 +79,6 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
         if tok in special_tokens:
             word_ids.append(None)
         else:
-            _word = words[_cursor]
             if tok == _word:
                 word_ids.append(_cursor)
                 _cursor += 1
