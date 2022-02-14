@@ -118,7 +118,7 @@ def tokenize_and_align_labels(
         ]
         special_tokens = set(tokenizer.special_tokens_map.values())
         word_ids_batches = [
-            align_tokens_with_words(tokens, subtokens, special_tokens, tokenizer.normalizer)
+            align_tokens_with_words(tokens, subtokens, special_tokens)
             for tokens, subtokens in zip(token_batches, subtokens_batches)
         ]
 
