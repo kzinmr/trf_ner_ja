@@ -1,16 +1,11 @@
-from multiprocessing.sharedctypes import Value
 import os
 import random
-import re
-import unicodedata
-from itertools import tee
 from typing import Dict, List, Union
 
 import numpy as np
 import tokenizations
 import torch
 from datasets import load_metric
-from mojimoji import zen_to_han
 from transformers import (
     AutoModelForTokenClassification,
     AutoTokenizer,
@@ -71,7 +66,7 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
         if len(wids) > 0:
             word_ids.append(wids[0])
             prev_wid = wids[0]
-        elif token == '[UNK]':
+        elif token == "[UNK]":
             # [UNK] のケースはなるべく近いidで内挿する
             cur = min(max_wid, prev_wid + 1)
             word_ids.append(cur)
@@ -190,36 +185,36 @@ class QuasiCoNLL2003TokenClassificationFeatures:
         # Set features: input_ids, attention_mask, and labels
         self.train_datasets = [
             {
-                k: d[k]
-                for k in [
-                    "attention_mask",
-                    "input_ids",
-                    "labels",
-                ]
+                "attention_mask": ams,
+                "input_ids": ids,
+                "labels": ls,
             }
             for d in _train_tokenized
+            for ams, ids, ls in zip(  # unbatch
+                d["attention_mask"], d["input_ids"], d["labels"]
+            )
         ]
         self.val_datasets = [
             {
-                k: d[k]
-                for k in [
-                    "attention_mask",
-                    "input_ids",
-                    "labels",
-                ]
+                "attention_mask": ams,
+                "input_ids": ids,
+                "labels": ls,
             }
             for d in _valid_tokenized
+            for ams, ids, ls in zip(  # unbatch
+                d["attention_mask"], d["input_ids"], d["labels"]
+            )
         ]
         self.test_datasets = [
             {
-                k: d[k]
-                for k in [
-                    "attention_mask",
-                    "input_ids",
-                    "labels",
-                ]
+                "attention_mask": ams,
+                "input_ids": ids,
+                "labels": ls,
             }
             for d in _test_tokenized
+            for ams, ids, ls in zip(  # unbatch
+                d["attention_mask"], d["input_ids"], d["labels"]
+            )
         ]
 
     def _tokenize_and_align_labels(self, examples: Dict[str, List[List]]):
@@ -277,7 +272,8 @@ if __name__ == "__main__":
     label_list = features.label_list
 
     import pickle
-    with open(os.path.join(data_dir, 'dataset.pkl'), 'wb') as fp:
+
+    with open(os.path.join(data_dir, "dataset.pkl"), "wb") as fp:
         pickle.dump(features.train_datasets, fp)
 
     # Build Trainer:
