@@ -7,3 +7,4 @@ fugashi
 unidic_lite
 regex
 mojimoji
+pytokenizations

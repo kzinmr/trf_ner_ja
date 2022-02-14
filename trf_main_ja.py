@@ -7,6 +7,7 @@ from itertools import tee
 from typing import Dict, List, Union
 
 import numpy as np
+import tokenizations
 import torch
 from datasets import load_metric
 from mojimoji import zen_to_han
@@ -59,7 +60,7 @@ def seed_everything(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
+def align_tokens_with_words_bad(words: List[str], tokens: List[str]) -> List[int]:
     """FastTokenizer の BatchEncoding.word_ids() をトークナイズ結果から計算."""
 
     def _pairwise(iterable):
@@ -122,6 +123,11 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     #     assert wid is None or tok == '[UNK]' or tok.replace("##", "") in words[wid]
     return word_ids
 
+
+def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
+    w2t, t2w = tokenizations.get_alignments(words, tokens)
+    word_ids = [wids[0] for wids in t2w]
+    return word_ids
 
 def tokenize_and_align_labels(
     examples: Dict[str, List[List]],
@@ -327,7 +333,7 @@ if __name__ == "__main__":
         per_device_eval_batch_size=16,
         num_train_epochs=1,
         weight_decay=0.01,
-        dataloader_drop_last=True,
+        # dataloader_drop_last=True,
     )
     # DataCollatorForTokenClassification:
     # - 各バッチサンプルに対して tokenizer.pad() が呼ばれ、torch.Tensorが返される
