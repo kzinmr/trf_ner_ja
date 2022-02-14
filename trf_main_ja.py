@@ -129,11 +129,12 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     word_ids = [None]
     prev_wid = 0
     for wids in t2w:
-        if len(wid) > 0:
+        if len(wids) > 0:
             word_ids.append(wids[0])
             prev_wid = wids[0]
         else:
             word_ids.append(prev_wid + 1)  # [UNK] のケース
+            prev_wid  += 1
     word_ids.append(None)
     return word_ids
 
