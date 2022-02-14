@@ -2,6 +2,7 @@ from multiprocessing.sharedctypes import Value
 import os
 import random
 import re
+import unicodedata
 from itertools import tee
 from typing import Dict, List, Union
 
@@ -73,12 +74,13 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     _cursor = 0
     subword = ""
     for tok, next_tok in _pairwise(tokens):
-        tok = re.sub(" +", "", tok)
-        _word = words[_cursor]
-        _word = zen_to_han(_word, kana=False, ascii=True, digit=True)
         if tok in special_tokens:
             word_ids.append(None)
         else:
+            tok = re.sub(" +", "", tok)
+            _word = words[_cursor]
+            _word = zen_to_han(_word, kana=False, ascii=True, digit=True)
+            _word = unicodedata.normalize("NKFD", _word)
             if tok == _word:
                 word_ids.append(_cursor)
                 _cursor += 1
@@ -94,6 +96,7 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
                     _cursor += 1
                     __word = words[_cursor]
                     __word = zen_to_han(__word, kana=False, ascii=True, digit=True)
+                    __word = unicodedata.normalize("NKFD", __word)
                     if tok == __word or tok == "[UNK]":
                         subword = ""
                     elif __word.startswith(tok):
