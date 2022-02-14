@@ -90,6 +90,7 @@ def tokenize_and_align_labels(
     tokenized_inputs = tokenizer(
         word_batches,
         truncation=True,
+        max_length=128,
         is_split_into_words=True,
     )
 
