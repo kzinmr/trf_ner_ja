@@ -236,8 +236,8 @@ if __name__ == "__main__":
         compute_metrics=compute_metrics,
     )
 
-    id2label = {v: index for index, v in enumerate(label_list)}
-    label2id = {v: k for k, v in id2label.items()}
+    label2id = {label: i for i, label in enumerate(label_list)}
+    id2label = {v: k for k, v in label2id.items()}
     trainer.model.config.label2id = label2id
     trainer.model.config.id2label = id2label
 
