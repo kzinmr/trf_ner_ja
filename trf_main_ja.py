@@ -56,12 +56,13 @@ def seed_everything(seed):
 
 
 def align_tokens_with_words(
-    words: List[str], tokens: List[str], special_tokens
+    words: List[str], tokens: List[str], special_tokens, normalizer
 ) -> List[int]:
     """FastTokenizer の BatchEncoding.word_ids() をトークナイズ結果から計算."""
     word_ids = []
     _cursor = 0
     for tok in tokens:
+        tok = normalizer(tok)
         if tok in special_tokens:
             word_ids.append(None)
         else:
@@ -116,7 +117,7 @@ def tokenize_and_align_labels(
         ]
         special_tokens = set(tokenizer.special_tokens_map.values())
         word_ids_batches = [
-            align_tokens_with_words(tokens, subtokens, special_tokens)
+            align_tokens_with_words(tokens, subtokens, special_tokens, tokenizer.normalizer)
             for tokens, subtokens in zip(token_batches, subtokens_batches)
         ]
 
