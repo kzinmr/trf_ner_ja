@@ -216,7 +216,7 @@ class QuasiCoNLL2003TokenClassificationFeatures:
                         tag = -100
                 label_ids.append(tag)
                 previous_word_idx = word_idx
-                previous_label = self.id2label[tag]
+                previous_label = self.id2label[tag] if tag != -100 else None
 
             label_ids_list.append(label_ids)
 
