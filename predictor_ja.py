@@ -3,7 +3,7 @@ import pickle
 from typing import Dict, List
 
 import fugashi
-from predictor_en import BIO, BIOTag, Decoder, Predictor, TagType, Token, TokenLabelPair
+from predictor_en import Decoder, Predictor, Token, TokenLabelPair
 import unidic_lite
 from transformers import (
     AutoModelForTokenClassification,
@@ -113,14 +113,13 @@ class SlowEncoder:
 
 
 class TrfNERSlow:
-    # Transformersの吐くラベル -> BIOTag
-    label2bio_tag = {
-        "LABEL_0": BIOTag.from_values(BIO.O, TagType.Other),
-        "LABEL_1": BIOTag.from_values(BIO.B, TagType.Target),
-        "LABEL_2": BIOTag.from_values(BIO.I, TagType.Target),
-    }
-
-    def __init__(self, model_path: str, max_length, window_stride, batch_size):
+    def __init__(
+        self,
+        model_path: str,
+        max_length: int = 128,
+        window_stride: int = 8,
+        batch_size: int = 32,
+    ):
         """Non-Fast Tokenizer向けのNERモデル"""
         with open(model_path, "rb") as fp:
             model_dict = pickle.load(fp)
@@ -129,12 +128,11 @@ class TrfNERSlow:
         self.model = model_dict["model"]
         # for label decoding
         id2label: Dict[int, str] = self.model.config.id2label
-        id2bio_tag = {i: self.label2bio_tag[l] for i, l in id2label.items()}
 
         # pipeline
         self.encoder = SlowEncoder(self.tokenizer, max_length, window_stride)
         self.predictor = Predictor(self.tokenizer, self.model, batch_size, max_length)
-        self.decoder = Decoder(id2bio_tag, window_stride)
+        self.decoder = Decoder(id2label, window_stride)
 
     @staticmethod
     def pickle_bert_model(model_dir: str, model_out_path: str):
@@ -158,3 +156,22 @@ class TrfNERSlow:
         outputs = self.predictor.predict(dataset)
         tokens_in_sentence = self.decoder.decode(sentence_text, offset_mapping, outputs)
         return tokens_in_sentence
+
+
+
+if __name__ == "__main__":
+
+    data_dir = "/app/workspace/"
+    pkl_path = os.path.join(data_dir, "predictor_en.pkl")
+    predictor = TrfNERSlow(pkl_path)
+
+    sent = """特定供給者パワーステーション株式会社（以下「甲」という。）と一般電気事業者又は
+特定電気事業者東京電力株式会社（以下「乙」という。）は、電気事業者による再生可能エ
+ネルギー電気の調達に関する特別措置法（平成23年法律第108号、その後の改正を含み
+以下「再エネ特措法」という。）に定める再生可能エネルギー電気の甲による供給及び乙によ
+る調達並びに甲の発電設備と乙の電力系統との接続等に関して、次のとおり契約（以下「本
+契約」という。）を締結する。"""
+    tokens_in_sentence = predictor.predict(sent)
+    print(tokens_in_sentence)
+    for t_l in tokens_in_sentence:
+        print(t_l.token.text, t_l.label)
