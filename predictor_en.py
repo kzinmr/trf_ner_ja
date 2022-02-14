@@ -26,49 +26,6 @@ def pairwise(iterable):
     return zip(a, b)
 
 
-class BIO(Enum):
-    B = "B"
-    I = "I"
-    O = "O"
-
-
-class TagType(Enum):
-    Other = "Other"
-    Target = "TARGET"
-
-
-@dataclass
-class BIOTag:
-    _label: str
-    bio: BIO = field(init=False)
-    tagtype: TagType = field(init=False)
-    label: str = field(init=False)
-
-    def __post_init__(self):
-        label = self._label
-        if len(label.split("-")) == 2:
-            bio_repr, tagtype_repr = label.split("-")
-            try:
-                self.bio = BIO(bio_repr)
-                self.tagtype = TagType(tagtype_repr)
-            except ValueError:
-                self.bio = BIO.O
-                self.tagtype = TagType.Other
-        else:
-            self.bio = BIO.O
-            self.tagtype = TagType.Other
-        self.label = (
-            f"{self.bio.value}-{self.tagtype.value}" if self.bio != BIO.O else "O"
-        )
-
-    @staticmethod
-    def from_values(bio: BIO, tag_type: TagType):
-        if bio != BIO.O:
-            return BIOTag(f"{bio.value}-{tag_type.value}")
-        else:
-            return BIOTag("O")
-
-
 @dataclass
 class Token:
     text: str
@@ -79,10 +36,10 @@ class Token:
 @dataclass
 class TokenLabelPair:
     token: Token
-    label: BIOTag
+    label: str
 
     @staticmethod
-    def build(text: str, start_pos: int, label: BIOTag):
+    def build(text: str, start_pos: int, label: str):
         end_pos = start_pos + len(text)
         return TokenLabelPair(Token(text, start_pos, end_pos), label)
 
@@ -138,10 +95,10 @@ class FastEncoder:
 
 
 class Decoder:
-    id2label: Dict[int, BIOTag]
+    id2label: Dict[int, str]
     window_stride: int
 
-    def __init__(self, id2label: Dict[int, BIOTag], window_stride: int):
+    def __init__(self, id2label: Dict[int, str], window_stride: int):
         self.id2label = id2label
         self.window_stride = window_stride
 
@@ -151,16 +108,18 @@ class Decoder:
         """ window毎の予測結果を、連続した一文内の予測結果に変換する. """
         window_stride = self.window_stride
 
-        def _merge_label_pair(left: BIOTag, right: BIOTag) -> BIOTag:
+        def _merge_label_pair(left: str, right: str) -> str:
             """I>B>Oの順序関係の下でペアのmaxをとる"""
+            left_bio = left.split("-")[0]
+            right_bio = right.split("-")[0]
             if left == right:
                 return left
-            elif left.bio == BIO.I or right.bio == BIO.I:
-                return left if left.bio == BIO.I else right
-            elif left.bio == BIO.B or right.bio == BIO.B:
-                return left if left.bio == BIO.B else right
+            elif left_bio == "I" or right_bio == "I":
+                return left if left_bio == "I" else right
+            elif left_bio == "B" or right_bio == "B":
+                return left if left_bio == "B" else right
             else:
-                return BIOTag.from_values(BIO.O, TagType.Other)
+                return "O"
 
         tokens_in_sentence: List[TokenLabelPair] = []
         if len(tokens_in_windows) == 1:
@@ -268,15 +227,12 @@ class Predictor:
 
 
 class TrfNERFast:
-    # Transformersの吐くラベル -> BIOTag
-    label2bio_tag = {
-        "LABEL_0": BIOTag.from_values(BIO.O, TagType.Other),
-        "LABEL_1": BIOTag.from_values(BIO.B, TagType.Target),
-        "LABEL_2": BIOTag.from_values(BIO.I, TagType.Target),
-    }
-
     def __init__(
-        self, model_path: str, max_length: int, window_stride: int, batch_size: int
+        self,
+        model_path: str,
+        max_length: int = 128,
+        window_stride: int = 8,
+        batch_size: int = 32,
     ):
         """FastTokenizer対応のNERモデル"""
         with open(model_path, "rb") as fp:
@@ -286,12 +242,11 @@ class TrfNERFast:
         self.model = model_dict["model"]
         # for label decoding
         id2label: Dict[int, str] = self.model.config.id2label
-        id2bio_tag = {i: self.label2bio_tag[l] for i, l in id2label.items()}
 
         # pipeline
         self.encoder = FastEncoder(self.tokenizer, max_length, window_stride)
         self.predictor = Predictor(self.tokenizer, self.model, batch_size, max_length)
-        self.decoder = Decoder(id2bio_tag, window_stride)
+        self.decoder = Decoder(id2label, window_stride)
 
     @staticmethod
     def pickle_bert_model(model_dir: str, model_out_path: str):
