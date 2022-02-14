@@ -3,7 +3,6 @@ import random
 from typing import Dict, List, Union
 
 import numpy as np
-from span_dataset_reader import QuasiDataset
 import torch
 from datasets import load_metric
 from transformers import (
@@ -17,6 +16,8 @@ from transformers import (
     TrainingArguments,
 )
 
+from predictor_ja import TrfNERSlow
+from span_dataset_reader import QuasiDataset
 
 metric = load_metric("seqeval")
 
@@ -291,6 +292,7 @@ if __name__ == "__main__":
     trainer.evaluate()
 
     trainer.save_model(data_dir)
+    TrfNERSlow.pickle_bert_model(data_dir, os.path.join(data_dir, "predictor_ja.pkl"))
 
     # prediction
     input_tokens, true_predictions, true_labels = predict(trainer, test_dataset)
