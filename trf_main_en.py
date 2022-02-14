@@ -94,9 +94,9 @@ def tokenize_and_align_labels(
 
 
 class CoNLL2003TokenClassificationFeatures:
-    train_datasets: List[dict]
-    val_datasets: List[dict]
-    test_datasets: List[dict]
+    train_datasets: List[Dict]
+    val_datasets: List[Dict]
+    test_datasets: List[Dict]
     label_list: List[str]
     id2label: Dict[int, str]
     label2id: Dict[str, int]
