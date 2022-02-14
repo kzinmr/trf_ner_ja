@@ -101,28 +101,30 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
                     word_ids.append(_cursor)
                 else:
                     _cursor += 1
-                    __word = words[_cursor]
-                    __word = _normalize(__word)
-                    if tok == __word or tok == "[UNK]":
-                        subword = ""
-                    elif __word.startswith(tok):
-                        subword = tok
-                    else:
-                        print(tok, words[_cursor])
-                        print(words)
-                        print(tokens)
-                        raise ValueError(
-                            f"word-token alignment failed.. {_cursor} {tok} {words[_cursor]}"
-                        )
-
                     if _cursor < len(words):
                         word_ids.append(_cursor)
+                        __word = words[_cursor]
+                        __word = _normalize(__word)
+                        if tok == __word or tok == "[UNK]":
+                            subword = ""
+                        elif __word.startswith(tok):
+                            subword = tok
+                        else:
+                            print(tok, words[_cursor])
+                            print(words)
+                            print(tokens)
+                            raise ValueError(
+                                f"word-token alignment failed.. {_cursor} {tok} {words[_cursor]}"
+                            )
                     else:
                         print(words)
                         print(tokens)
                         raise ValueError(
                             f"word-token alignment failed.. {_cursor} {len(words)} {tok} {words[-1]}"
                         )
+
+
+
 
 
     # assertionしたいが、正規化など含めて一致をとるのが手間なため省く
