@@ -6,3 +6,4 @@ mecab-python3
 fugashi
 unidic_lite
 regex
+mojimoji
