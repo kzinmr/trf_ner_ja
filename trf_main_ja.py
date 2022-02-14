@@ -1,6 +1,7 @@
 from multiprocessing.sharedctypes import Value
 import os
 import random
+import re
 from mojimoji import zen_to_han
 from typing import Dict, List, Union
 
@@ -64,8 +65,9 @@ def align_tokens_with_words(
     _cursor = 0
     subword = ''
     for tok in tokens:
-        # tok = unicodedata.normalize("NFKD", tok)
-        tok = zen_to_han(tok, kana=False, ascii=True, digit=True)
+        tok = re.sub(' +', '', tok)
+        _word = words[_cursor]
+        _word = zen_to_han(_word, kana=False, ascii=True, digit=True)
         if tok in special_tokens:
             word_ids.append(None)
         else:
@@ -82,7 +84,9 @@ def align_tokens_with_words(
                     word_ids.append(_cursor)
                 else:
                     _cursor += 1
-                    if tok == words[_cursor] or words[_cursor].startswith(tok) or tok == '[UNK]':
+                    __word = words[_cursor]
+                    __word = zen_to_han(__word, kana=False, ascii=True, digit=True)                    
+                    if tok == __word or __word.startswith(tok) or tok == '[UNK]':
                         subword = ''
         #                 while _cursor < len(words) and tok != words[_cursor]:
         #                     _cursor += 1
