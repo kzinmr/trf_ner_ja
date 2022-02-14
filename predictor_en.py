@@ -15,6 +15,7 @@ from transformers import (
     DataCollatorWithPadding,
     PreTrainedTokenizerFast,
 )
+from trf_main_en import CoNLL2003TokenClassificationFeatures
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -269,3 +270,48 @@ class TrfNERFast:
         outputs = self.predictor.predict(dataset)
         tokens_in_sentence = self.decoder.decode(sentence_text, offset_mapping, outputs)
         return tokens_in_sentence
+
+
+if __name__ == "__main__":
+
+    data_dir = "/app/workspace/"
+    pkl_path = os.path.join(data_dir, "predictor_en.pkl")
+    predictor = TrfNERFast(pkl_path)
+    tokens = [
+        "The",
+        "European",
+        "Commission",
+        "said",
+        "on",
+        "Thursday",
+        "it",
+        "disagreed",
+        "with",
+        "German",
+        "advice",
+        "to",
+        "consumers",
+        "to",
+        "shun",
+        "British",
+        "lamb",
+        "until",
+        "scientists",
+        "determine",
+        "whether",
+        "mad",
+        "cow",
+        "disease",
+        "can",
+        "be",
+        "transmitted",
+        "to",
+        "sheep",
+        ".",
+    ]
+    sent = " ".join(tokens)
+    tokens_in_sentence = predictor.predict(sent)
+    print(tokens_in_sentence)
+    for t_l in tokens_in_sentence:
+        print(t_l.token.text, t_l.label)
+        print(t_l.token.text, t_l.label)
