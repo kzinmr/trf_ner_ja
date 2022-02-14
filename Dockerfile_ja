@@ -38,6 +38,7 @@ RUN pip3 install -U pip
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
+COPY predictor_en.py /app/predictor_en.py
 COPY predictor_ja.py /app/predictor_ja.py
 COPY trf_main_ja.py /app/trf_main_ja.py
 CMD ["python3", "/app/trf_main_ja.py"]
