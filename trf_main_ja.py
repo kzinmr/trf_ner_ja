@@ -1,6 +1,7 @@
 from multiprocessing.sharedctypes import Value
 import os
 import random
+import unicodedata
 from typing import Dict, List, Union
 
 import numpy as np
@@ -56,13 +57,13 @@ def seed_everything(seed):
 
 
 def align_tokens_with_words(
-    words: List[str], tokens: List[str], special_tokens, normalizer
+    words: List[str], tokens: List[str], special_tokens,
 ) -> List[int]:
     """FastTokenizer の BatchEncoding.word_ids() をトークナイズ結果から計算."""
     word_ids = []
     _cursor = 0
     for tok in tokens:
-        tok = normalizer(tok)
+        tok = unicodedata.normalize("NFKD", tok)
         if tok in special_tokens:
             word_ids.append(None)
         else:
