@@ -84,10 +84,11 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
             word_ids.append(None)
         else:
             tok = _normalize(tok)
+            next_tok = _normalize(next_tok)
             
             _word = words[_cursor]
             _word = _normalize(_word)
-            if tok == _word:
+            if tok == _word and not next_tok.startswith('##'):
                 word_ids.append(_cursor)
                 _cursor += 1
                 subword = ""
