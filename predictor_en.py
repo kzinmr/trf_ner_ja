@@ -306,4 +306,3 @@ if __name__ == "__main__":
     print(tokens_in_sentence)
     for t_l in tokens_in_sentence:
         print(t_l.token.text, t_l.label)
-        print(t_l.token.text, t_l.label)
