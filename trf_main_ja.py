@@ -81,12 +81,13 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
             if tok == _word:
                 word_ids.append(_cursor)
                 _cursor += 1
-            elif _word.startswith(tok + next_tok.replace("##", "")):
+                subword = ""
+            elif _word.startswith(tok + re.sub("##", "", next_tok)):
                 subword = tok
                 word_ids.append(_cursor)
             else:
-                if subword and subword + tok.replace("##", "") in _word:
-                    subword = subword + tok.replace("##", "")
+                if subword and subword + re.sub("##", "", tok) in _word:
+                    subword = subword + re.sub("##", "", tok)
                     word_ids.append(_cursor)
                 else:
                     _cursor += 1
@@ -94,8 +95,6 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
                     __word = zen_to_han(__word, kana=False, ascii=True, digit=True)
                     if tok == __word or tok == "[UNK]" or __word.startswith(tok):
                         subword = ""
-                        #                 while _cursor < len(words) and tok != words[_cursor]:
-                        #                     _cursor += 1
                         if _cursor < len(words):
                             word_ids.append(_cursor)
                         else:
