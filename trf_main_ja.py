@@ -129,7 +129,7 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     w2t, t2w = tokenizations.get_alignments(words, tokens[1:-1])
     word_ids = [None]
     prev_wid = 0
-    max_wid = [wids[0] if len(wids)>0 else 0 for wids in t2w]
+    max_wid = max([wids[0] if len(wids)>0 else 0 for wids in t2w])
     for wids in t2w:
         if len(wids) > 0:
             word_ids.append(wids[0])
