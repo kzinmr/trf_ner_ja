@@ -92,11 +92,13 @@ def align_tokens_with_words(
                             raise ValueError(f"word-token alignment failed.. {_cursor} {len(words)} {tok} {words[-1]}")
                     else:
                         print(tok, words[_cursor])
+                        print(words)
+                        print(tokens)                        
                         raise ValueError(f"word-token alignment failed.. {_cursor} {tok} {words[_cursor]}")
 
     # assertionしたいが、正規化など含めて一致をとるのが手間なため省く
     # for tok, wid in zip(tokens, word_ids):
-    #     assert wid is None or tok.replace("##", "") in words[wid]
+    #     assert wid is None or tok == '[UNK]' or tok.replace("##", "") in words[wid]
     return word_ids
 
 
