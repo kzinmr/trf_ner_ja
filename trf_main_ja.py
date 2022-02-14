@@ -275,7 +275,7 @@ if __name__ == "__main__":
 
     import pickle
     with open(os.path.join(data_dir, 'dataset.pkl'), 'wb') as fp:
-        pickle.dump(features, fp)
+        pickle.dump(features.train_datasets, fp)
 
     # Build Trainer:
     # - DataLoaderのラッパー (batcher, sampler, collator)
