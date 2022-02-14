@@ -140,7 +140,7 @@ def tokenize_and_align_labels(
         for ids, lbs in zip(tokenized_inputs["input_ids"], label_ids_list)
     )
 
-    tokenized_inputs["labels"] = torch.Tensor(label_ids_list)
+    tokenized_inputs["labels"] = torch.as_tensor(label_ids_list)
     return tokenized_inputs
 
 
