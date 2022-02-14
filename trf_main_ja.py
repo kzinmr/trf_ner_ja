@@ -80,7 +80,7 @@ def align_tokens_with_words(
                     word_ids.append(_cursor)
                 else:
                     _cursor += 1
-                    if tok == words[_cursor] or words[_cursor].startswith(tok):
+                    if tok == words[_cursor] or words[_cursor].startswith(tok) or tok == '[UNK]':
                         subword = ''
         #                 while _cursor < len(words) and tok != words[_cursor]:
         #                     _cursor += 1
