@@ -150,7 +150,7 @@ class QuasiCoNLL2003TokenClassificationFeatures:
     def __init__(
         self,
         dataset: QuasiDataset,
-        tokenizer: PreTrainedTokenizerFast,
+        tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
         label_all_tokens=True,
     ):
         """
@@ -232,7 +232,6 @@ def predict(trainer, test_dataset):
     true_labels = [[label_list[l] for l in label if l != -100] for label in labels]
     # 予測だけだと label_id==-100 が確約できないため、先頭に [CLS] 末尾に [SEP] が来る事実を用いる
     true_predictions = [[label_list[p] for p in preds[1:-1]] for preds in predictions]
-    assert all(len(ps) == len(ls) for ps, ls in zip(true_predictions, true_labels))
     input_tokens = [tokenizer.convert_ids_to_tokens(ids[1:-1]) for ids in input_ids]
     return input_tokens, true_predictions, true_labels
 
@@ -241,10 +240,10 @@ if __name__ == "__main__":
 
     data_dir = "/app/workspace/"
 
-    model_checkpoint = "distilbert-base-uncased"
+    model_checkpoint = "cl-tohoku/bert-base-japanese-v2"
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
 
-    filename = "dataset.jsonl"
+    filename = os.path.join(data_dir, "dataset.jsonl")
     dataset = QuasiDataset.load_from_span_dataset(
         filename, valid_ratio=0.2, test_ratio=0.2
     )
@@ -286,6 +285,11 @@ if __name__ == "__main__":
         tokenizer=tokenizer,
         compute_metrics=compute_metrics,
     )
+    # Avoid the default "LABEL_0"-style labeling
+    label2id = {label: i for i, label in enumerate(label_list)}
+    id2label = {v: k for k, v in label2id.items()}
+    trainer.model.config.label2id = label2id
+    trainer.model.config.id2label = id2label
 
     trainer.train()
 
