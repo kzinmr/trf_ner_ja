@@ -123,21 +123,21 @@ class Decoder:
             for prev_w, next_w in pairwise(tokens_in_windows):
                 #     print(prev_w[-window_stride:])
                 #     print(next_w[:window_stride])
-                for token in prev_w:
-                    if token.start_pos not in startpos2token:
-                        startpos2token[token.start_pos] = token
+                for token_label in prev_w:
+                    if token_label.token.start not in startpos2token:
+                        startpos2token[token_label.token.start] = token_label
 
-                for prev_token, next_token in zip(
+                for prev_token_label, next_token_label in zip(
                     prev_w[-window_stride:], next_w[:window_stride]
                 ):
-                    start_pos = prev_token.start_pos
-                    merged_label = _merge_label_pair(prev_token.label, next_token.label)
+                    start_pos = prev_token_label.token.start
+                    merged_label = _merge_label_pair(prev_token_label.label, next_token_label.label)
                     startpos2token[start_pos] = TokenLabelPair.build(
-                        prev_token.text, start_pos, merged_label
+                        prev_token_label.token.text, start_pos, merged_label
                     )
-            for token in tokens_in_windows[-1]:
-                if token.start_pos not in startpos2token:
-                    startpos2token[token.start_pos] = token
+            for token_label in tokens_in_windows[-1]:
+                if token_label.token.start not in startpos2token:
+                    startpos2token[token_label.token.start] = token_label
 
             tokens_in_sentence = [
                 v for _, v in sorted(startpos2token.items(), key=lambda x: x[0])
