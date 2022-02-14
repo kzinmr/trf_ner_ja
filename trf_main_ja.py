@@ -67,15 +67,17 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     word_ids = [None]
     prev_wid = 0
     max_wid = max([wids[0] if len(wids) > 0 else 0 for wids in t2w])
-    for wids in t2w:
+    for token, wids in zip(tokens, t2w):
         if len(wids) > 0:
             word_ids.append(wids[0])
             prev_wid = wids[0]
-        else:
+        elif token == '[UNK]':
             # [UNK] のケースはなるべく近いidで内挿する
             cur = min(max_wid, prev_wid + 1)
             word_ids.append(cur)
             prev_wid += 1
+        else:  # '[PAD]'
+            word_ids.append(None)
     word_ids.append(None)
     return word_ids
 
@@ -91,6 +93,7 @@ def tokenize_and_align_labels(
     label_batches = examples["ner_tags"]
     tokenized_inputs = tokenizer(
         word_batches,
+        padding=True,
         truncation=True,
         max_length=MAX_LENGTH,
         is_split_into_words=True,
