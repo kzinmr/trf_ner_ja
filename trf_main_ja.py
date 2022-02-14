@@ -85,7 +85,7 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
                 subword = tok
                 word_ids.append(_cursor)
             else:
-                if subword + tok.replace("##", "") in _word:
+                if subword and subword + tok.replace("##", "") in _word:
                     subword = subword + tok.replace("##", "")
                     word_ids.append(_cursor)
                 else:
