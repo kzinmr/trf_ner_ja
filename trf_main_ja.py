@@ -273,6 +273,10 @@ if __name__ == "__main__":
     test_dataset = features.test_datasets
     label_list = features.label_list
 
+    import pickle
+    with open(os.path.join(data_dir, 'dataset.pkl'), 'wb') as fp:
+        pickle.dump(features, fp)
+
     # Build Trainer:
     # - DataLoaderのラッパー (batcher, sampler, collator)
     # - Training Loop管理
@@ -292,7 +296,7 @@ if __name__ == "__main__":
     # DataCollatorForTokenClassification:
     # - 各バッチサンプルに対して tokenizer.pad() が呼ばれ、torch.Tensorが返される
     # - バッチ内のトークン単位ラベルも処理される (See. DataCollatorWithPadding)
-    print([type(d["input_ids"]) for d in train_dataset])
+
     data_collator = DataCollatorForTokenClassification(
         tokenizer,
         padding="max_length",
