@@ -126,7 +126,15 @@ def align_tokens_with_words_bad(words: List[str], tokens: List[str]) -> List[int
 
 def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     w2t, t2w = tokenizations.get_alignments(words, tokens[1:-1])
-    word_ids = [None] + [wids[0] for wids in t2w] + [None]
+    word_ids = [None]
+    prev_wid = 0
+    for wids in t2w:
+        if len(wid) > 0:
+            word_ids.append(wids[0])
+            prev_wid = wids[0]
+        else:
+            word_ids.append(prev_wid + 1)  # [UNK] のケース
+    word_ids.append(None)
     return word_ids
 
 def tokenize_and_align_labels(
