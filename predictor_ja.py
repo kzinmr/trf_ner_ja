@@ -3,13 +3,15 @@ import pickle
 from typing import Dict, List
 
 import fugashi
-from predictor_en import Decoder, Predictor, Token, TokenLabelPair
 import unidic_lite
 from transformers import (
     AutoModelForTokenClassification,
     AutoTokenizer,
     PreTrainedTokenizer,
 )
+
+from predictor_en import Decoder, Predictor, Token, TokenLabelPair
+
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -156,7 +158,6 @@ class TrfNERSlow:
         outputs = self.predictor.predict(dataset)
         tokens_in_sentence = self.decoder.decode(sentence_text, offset_mapping, outputs)
         return tokens_in_sentence
-
 
 
 if __name__ == "__main__":
