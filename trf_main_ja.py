@@ -1,6 +1,6 @@
 import os
 import random
-from typing import Union
+from typing import Dict, List, Union
 
 import numpy as np
 from span_dataset_reader import QuasiDataset
@@ -54,8 +54,8 @@ def seed_everything(seed):
 
 
 def align_tokens_with_words(
-    words: list[str], tokens: list[str], special_tokens
-) -> list[int]:
+    words: List[str], tokens: List[str], special_tokens
+) -> List[int]:
     """FastTokenizer の BatchEncoding.word_ids() をトークナイズ結果から計算."""
     word_ids = []
     _cursor = 0
@@ -84,7 +84,7 @@ def align_tokens_with_words(
 
 
 def tokenize_and_align_labels(
-    examples: dict[str, list],
+    examples: Dict[str, list],
     tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
     label_all_tokens=True,
 ) -> BatchEncoding:
@@ -139,12 +139,12 @@ def tokenize_and_align_labels(
 
 
 class QuasiCoNLL2003TokenClassificationFeatures:
-    train_datasets: list[dict[str, int]]
-    val_datasets: list[dict[str, int]]
-    test_datasets: list[dict[str, int]]
-    label_list: list[str]
-    id2label: dict[int, str]
-    label2id: dict[str, int]
+    train_datasets: List[Dict[str, int]]
+    val_datasets: List[Dict[str, int]]
+    test_datasets: List[Dict[str, int]]
+    label_list: List[str]
+    id2label: Dict[int, str]
+    label2id: Dict[str, int]
 
     def __init__(
         self,

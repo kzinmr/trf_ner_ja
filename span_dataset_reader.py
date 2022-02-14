@@ -1,7 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import fugashi
 import unidic_lite
@@ -37,11 +37,11 @@ class MeCabTokenizer:
         mecab_option = "-d {} -r {} ".format(dic_dir, mecabrc)
         self.mecab = fugashi.GenericTagger(mecab_option)
 
-    def tokenize(self, text: str) -> list[str]:
+    def tokenize(self, text: str) -> List[str]:
         # return self.mecab.parse(text).strip().split(" ")
         return self.mecab(text)
 
-    def tokenize_with_alignment(self, text: str) -> list[Token]:
+    def tokenize_with_alignment(self, text: str) -> List[Token]:
         token_surfaces = [word.surface for word in self.mecab(text)]
         tokens = []
         _cursor = 0
@@ -62,8 +62,8 @@ class Span2TokenConverter:
 
     @staticmethod
     def _get_chunk_span(
-        query_span: tuple[int, int], superspans: list[tuple[int, int]]
-    ) -> Optional[tuple[int, int]]:
+        query_span: Tuple[int, int], superspans: List[Tuple[int, int]]
+    ) -> Optional[Tuple[int, int]]:
         """トークンを包摂するチャンクについて、トークンの文字列スパンを包摂するチャンクのスパンを返す.
         NOTE: 一つのチャンクはトークン境界を跨がないと想定.
         """
@@ -74,12 +74,12 @@ class Span2TokenConverter:
 
     @classmethod
     def _get_token2label_map(
-        cls, spans_of_tokens: list[tuple[int, int]], spans_of_chunks: list[ChunkSpan]
-    ) -> dict[tuple[int, int], str]:
+        cls, spans_of_tokens: List[Tuple[int, int]], spans_of_chunks: List[ChunkSpan]
+    ) -> Dict[Tuple[int, int], str]:
         """トークンの文字列スパンから、トークンを包摂するチャンクのラベルへのマップを構成."""
         span_tuples = [(span.start, span.end) for span in spans_of_chunks]
         _span2label = {(span.start, span.end): span.label for span in spans_of_chunks}
-        tokenspan2tagtype: dict[tuple[int, int], str] = {}
+        tokenspan2tagtype: Dict[Tuple[int, int], str] = {}
         for original_token_span in spans_of_tokens:
             chunk_span = cls._get_chunk_span(original_token_span, span_tuples)
             if chunk_span is not None:
@@ -87,10 +87,10 @@ class Span2TokenConverter:
         return tokenspan2tagtype
 
     @staticmethod
-    def _get_labels_per_tokens(spans_of_tokens: list[tuple[int, int]], tokenspan2tagtype: dict[tuple[int, int], str]) -> list[str]:
+    def _get_labels_per_tokens(spans_of_tokens: List[Tuple[int, int]], tokenspan2tagtype: Dict[Tuple[int, int], str]) -> List[str]:
         """トークン列に対応するラベル列をトークンスパンからラベルへのマップを基に構成"""
         label = "O"
-        token_labels: list[str] = []
+        token_labels: List[str] = []
         for token_span in spans_of_tokens:
             if token_span in tokenspan2tagtype:
                 tagtype = tokenspan2tagtype[token_span]
@@ -106,8 +106,8 @@ class Span2TokenConverter:
 
     @classmethod
     def get_token_labels(
-        cls, tokens: list[Token], spans_of_chunks: list[ChunkSpan]
-    ) -> list[TokenLabelPair]:
+        cls, tokens: List[Token], spans_of_chunks: List[ChunkSpan]
+    ) -> List[TokenLabelPair]:
         """ 文字列スパンとトークンスパンから、トークン-ラベルペアを得る.
         """
         spans_of_tokens = [(token.start, token.end) for token in tokens]
@@ -119,8 +119,8 @@ class Span2TokenConverter:
         return token_labels
 
     def get_token_label_pairs(
-        self, text: str, spans_of_chunks: list[ChunkSpan]
-    ) -> list[TokenLabelPair]:
+        self, text: str, spans_of_chunks: List[ChunkSpan]
+    ) -> List[TokenLabelPair]:
         """
         文字列チャンクスパン+元テキスト -> トークン-BIOラベルのペアを返すパイプライン
         - 文字列チャンクスパン:	[(0, 2, "PERSON")], 元テキスト: "太郎の家"
@@ -158,13 +158,13 @@ def window_token_labels(
         return sentence_windows
 
 
-def read_span_dataset(filename_jsonl: str) -> list[list[TokenLabelPair]]:
+def read_span_dataset(filename_jsonl: str) -> List[List[TokenLabelPair]]:
     """ 文字列位置スパンで記録されたデータセットをトークナイズし、
     トークン-ラベルのペアからなるConll2003-likeな形式に変換する.
     NOTE: メモリ溢れ防止のためのデータ分割処理もここで行う.
     """
     conv = Span2TokenConverter()
-    dataset: list[list[TokenLabelPair]] = []
+    dataset: List[List[TokenLabelPair]] = []
     with open(filename_jsonl) as fp:
         lines = [json.loads(line) for line in fp if line.strip()]
         for data in lines:
@@ -185,7 +185,7 @@ def train_valid_test_split(
     dataset: list,
     valid_ratio: float = 0.2,
     test_ratio: float = 0.2
-) -> tuple[list, list, list]:
+) -> Tuple[list, list, list]:
     train_valid, test = train_test_split(dataset, test_size=test_ratio)
     rel_valid_ratio = valid_ratio / (1 - test_ratio)
     train, valid = train_test_split(train_valid, test_size=rel_valid_ratio)
@@ -200,16 +200,16 @@ def bio_sorter(x: str):
 
 
 class QuasiDataset:
-    train: list[dict[str, Union[int, list[str]]]]
-    validation: list[dict[str, Union[int, list[str]]]]
-    test: list[dict[str, Union[int, list[str]]]]
-    label_list: list[str]
-    id2label: dict[int, str]
-    label2id: dict[str, int]
+    train: List[Dict[str, Union[int, List[str]]]]
+    validation: List[Dict[str, Union[int, List[str]]]]
+    test: List[Dict[str, Union[int, List[str]]]]
+    label_list: List[str]
+    id2label: Dict[int, str]
+    label2id: Dict[str, int]
 
     def __init__(
         self,
-        dataset: list[list[TokenLabelPair]],
+        dataset: List[List[TokenLabelPair]],
         valid_ratio: float = 0.2,
         test_ratio: float = 0.2
     ):

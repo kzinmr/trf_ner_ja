@@ -1,6 +1,6 @@
 import os
 import pickle
-from typing import List
+from typing import Dict, List
 
 import fugashi
 from predictor_en import BIO, BIOTag, Decoder, Predictor, TagType, Token, TokenLabelPair
@@ -23,11 +23,11 @@ class MeCabPreTokenizer:
         mecab_option = "-d {} -r {} ".format(dic_dir, mecabrc)
         self.mecab = fugashi.GenericTagger(mecab_option)
 
-    def tokenize(self, text: str) -> list[str]:
+    def tokenize(self, text: str) -> List[str]:
         # return self.mecab.parse(text).strip().split(" ")
         return self.mecab(text)
 
-    def tokenize_with_alignment(self, text: str) -> list[Token]:
+    def tokenize_with_alignment(self, text: str) -> List[Token]:
         token_surfaces = [word.surface for word in self.mecab(text)]
         tokens = []
         _cursor = 0
@@ -45,7 +45,7 @@ class MeCabPreTokenizer:
         sentence: str,
         max_length: int = 128,
         window_stride: int = 5,
-    ) -> list[list[Token]]:
+    ) -> List[List[Token]]:
         """一文のデータが長い場合にストライド付き固定長分割を施す処理."""
         tokens = self.tokenize_with_alignment(sentence)
 
@@ -128,7 +128,7 @@ class TrfNERSlow:
         assert not self.tokenizer.is_fast
         self.model = model_dict["model"]
         # for label decoding
-        id2label: dict[int, str] = self.model.config.id2label
+        id2label: Dict[int, str] = self.model.config.id2label
         id2bio_tag = {i: self.label2bio_tag[l] for i, l in id2label.items()}
 
         # pipeline

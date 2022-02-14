@@ -1,5 +1,6 @@
 import os
 import random
+from typing import Dict, List
 
 import numpy as np
 import torch
@@ -51,7 +52,7 @@ def seed_everything(seed):
 
 
 def tokenize_and_align_labels(
-    examples: dict[str, list],
+    examples: Dict[str, list],
     tokenizer: PreTrainedTokenizerFast,
     label_all_tokens=True,
 ) -> BatchEncoding:
@@ -91,12 +92,12 @@ def tokenize_and_align_labels(
 
 
 class CoNLL2003TokenClassificationFeatures:
-    train_datasets: list[dict]
-    val_datasets: list[dict]
-    test_datasets: list[dict]
-    label_list: list[str]
-    id2label: dict[int, str]
-    label2id: dict[str, int]
+    train_datasets: List[dict]
+    val_datasets: List[dict]
+    test_datasets: List[dict]
+    label_list: List[str]
+    id2label: Dict[int, str]
+    label2id: Dict[str, int]
 
     def __init__(
         self,
@@ -112,7 +113,7 @@ class CoNLL2003TokenClassificationFeatures:
         datasets = load_dataset("conll2003")
 
         # ラベルのdecoding情報
-        self.label_list: list[str] = (
+        self.label_list: List[str] = (
             datasets["train"].features["ner_tags"].feature.names
         )
         self.id2label = dict(enumerate(self.label_list))

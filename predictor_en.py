@@ -3,7 +3,7 @@ import pickle
 from dataclasses import dataclass, field
 from enum import Enum
 from itertools import chain, tee
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import torch
 from torch.utils.data.dataloader import DataLoader
@@ -139,16 +139,16 @@ class FastEncoder:
 
 
 class Decoder:
-    id2label: dict[int, BIOTag]
+    id2label: Dict[int, BIOTag]
     window_stride: int
 
-    def __init__(self, id2label: dict[int, BIOTag], window_stride: int):
+    def __init__(self, id2label: Dict[int, BIOTag], window_stride: int):
         self.id2label = id2label
         self.window_stride = window_stride
 
     def unwindow(
-        self, tokens_in_windows: list[list[TokenLabelPair]]
-    ) -> list[TokenLabelPair]:
+        self, tokens_in_windows: List[List[TokenLabelPair]]
+    ) -> List[TokenLabelPair]:
         """ window毎の予測結果を、連続した一文内の予測結果に変換する. """
         window_stride = self.window_stride
 
@@ -197,9 +197,9 @@ class Decoder:
     def decode(
         self,
         sentence_text: str,
-        offset_mapping: list[list[tuple[int, int]]],
-        outputs: list[TokenClassifierOutput],
-    ) -> list[TokenLabelPair]:
+        offset_mapping: List[List[Tuple[int, int]]],
+        outputs: List[TokenClassifierOutput],
+    ) -> List[TokenLabelPair]:
         # decode logits into label ids
         batch_label_ids = [
             torch.argmax(out.logits, axis=2).detach().numpy().tolist()
@@ -243,7 +243,7 @@ class Predictor:
         self.batch_size = batch_size
         self.max_length = max_length
 
-    def predict(self, dataset: list[dict]) -> list[TokenClassifierOutput]:
+    def predict(self, dataset: List[dict]) -> List[TokenClassifierOutput]:
         """ Dataset(Tensor) から Dataloader を構成し、数値予測を行う. """
 
         # 予測なのでシャッフルなしのサンプラーを使用
@@ -286,7 +286,7 @@ class TrfNERFast:
         assert self.tokenizer.is_fast
         self.model = model_dict["model"]
         # for label decoding
-        id2label: dict[int, str] = self.model.config.id2label
+        id2label: Dict[int, str] = self.model.config.id2label
         id2bio_tag = {i: self.label2bio_tag[l] for i, l in id2label.items()}
 
         # pipeline
