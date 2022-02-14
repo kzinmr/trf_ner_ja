@@ -176,6 +176,7 @@ class QuasiCoNLL2003TokenClassificationFeatures:
         _train = dataset.train_batch(batch_size)
         _valid = dataset.validation_batch(batch_size)
         _test = dataset.test_batch(batch_size)
+        print(len(_train), len(_valid), len(_test))
         _train_tokenized = map(self._tokenize_and_align_labels, _train)
         _valid_tokenized = map(self._tokenize_and_align_labels, _valid)
         _test_tokenized = map(self._tokenize_and_align_labels, _test)

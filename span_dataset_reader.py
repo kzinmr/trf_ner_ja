@@ -292,6 +292,7 @@ class QuasiDataset:
         dataset_train = read_span_dataset(train_filepath)
         dataset_valid = read_span_dataset(valid_filepath)
         dataset_test = read_span_dataset(test_filepath)
+        print(len(dataset_train), len(dataset_valid), len(dataset_test))
 
         _label_set_train = {t_l.label for tls in dataset_train for t_l in tls}
         _label_set_valid = {t_l.label for tls in dataset_valid for t_l in tls}
