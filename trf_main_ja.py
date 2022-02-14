@@ -327,11 +327,12 @@ if __name__ == "__main__":
         per_device_eval_batch_size=16,
         num_train_epochs=1,
         weight_decay=0.01,
+        dataloader_drop_last=True,
     )
     # DataCollatorForTokenClassification:
     # - 各バッチサンプルに対して tokenizer.pad() が呼ばれ、torch.Tensorが返される
     # - バッチ内のトークン単位ラベルも処理される (See. DataCollatorWithPadding)
-    data_collator = DataCollatorForTokenClassification(tokenizer)
+    data_collator = DataCollatorForTokenClassification(tokenizer, padding=True, max_length=self.max_length)
     trainer = Trainer(
         model,
         args,
