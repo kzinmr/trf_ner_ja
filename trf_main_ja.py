@@ -69,6 +69,12 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
         next(b, None)
         return zip(a, b)
 
+    def _normalize(t: str) -> str:
+        t = zen_to_han(t, kana=False, ascii=True, digit=True)
+        t = unicodedata.normalize("NFKD", t)
+        t = re.sub(" +", "", t)
+        return t
+
     special_tokens = ["[CLS]", "[SEP]"]
     word_ids = []
     _cursor = 0
@@ -77,10 +83,10 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
         if tok in special_tokens:
             word_ids.append(None)
         else:
-            tok = re.sub(" +", "", tok)
+            tok = _normalize(tok)
+            
             _word = words[_cursor]
-            _word = zen_to_han(_word, kana=False, ascii=True, digit=True)
-            _word = unicodedata.normalize("NFKD", _word)
+            _word = _normalize(_word)
             if tok == _word:
                 word_ids.append(_cursor)
                 _cursor += 1
@@ -95,8 +101,7 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
                 else:
                     _cursor += 1
                     __word = words[_cursor]
-                    __word = zen_to_han(__word, kana=False, ascii=True, digit=True)
-                    __word = unicodedata.normalize("NFKD", __word)
+                    __word = _normalize(__word)
                     if tok == __word or tok == "[UNK]":
                         subword = ""
                     elif __word.startswith(tok):
