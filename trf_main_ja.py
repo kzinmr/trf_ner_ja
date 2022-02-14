@@ -59,10 +59,9 @@ def seed_everything(seed):
     torch.backends.cudnn.deterministic = True
 
 
-
-
 def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     """FastTokenizer の BatchEncoding.word_ids() をトークナイズ結果から計算."""
+
     def _pairwise(iterable):
         # pairwise('ABCDEFG') --> AB BC CD DE EF FG
         a, b = tee(iterable)
@@ -85,10 +84,9 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
         else:
             tok = _normalize(tok)
             next_tok = _normalize(next_tok)
-            
             _word = words[_cursor]
             _word = _normalize(_word)
-            if tok == _word and not next_tok.startswith('##'):
+            if tok == _word and not next_tok.startswith("##"):
                 word_ids.append(_cursor)
                 _cursor += 1
                 subword = ""
@@ -110,22 +108,18 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
                         elif __word.startswith(tok):
                             subword = tok
                         else:
-                            print(tok, words[_cursor])
-                            print(words)
-                            print(tokens)
+                            # print(tok, words[_cursor])
+                            # print(words)
+                            # print(tokens)
                             raise ValueError(
                                 f"word-token alignment failed.. {_cursor} {tok} {words[_cursor]}"
                             )
                     else:
-                        print(words)
-                        print(tokens)
+                        # print(words)
+                        # print(tokens)
                         raise ValueError(
                             f"word-token alignment failed.. {_cursor} {len(words)} {tok} {words[-1]}"
                         )
-
-
-
-
 
     # assertionしたいが、正規化など含めて一致をとるのが手間なため省く
     # for tok, wid in zip(tokens, word_ids):
@@ -161,13 +155,15 @@ def tokenize_and_align_labels(
         ]
         # special_tokens = set(tokenizer.special_tokens_map.values())
         label_wids = []
-        for tokens, subtokens, tags in zip(token_batches, subtokens_batches, label_batches):
+        for tokens, subtokens, tags in zip(
+            token_batches, subtokens_batches, label_batches
+        ):
             try:
                 word_ids = align_tokens_with_words(tokens, subtokens)
                 label_wids.append((tags, word_ids))
             except ValueError:
+                # 元の文の分かち書き(word)と、文窓の分かち書き(token)とが一致しないことがある
                 continue
-
 
     label_ids_list = []
     for tags, word_ids in label_wids:
