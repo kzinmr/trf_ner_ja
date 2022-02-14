@@ -87,13 +87,8 @@ def tokenize_and_align_labels(
     word_batches = examples["tokens"]
     label_batches = examples["ner_tags"]
     tokenized_inputs = tokenizer(
-        word_batches,
-        padding=True,
-        truncation=True,
-        max_length=MAX_LENGTH,
-        is_split_into_words=True,
+        word_batches, truncation=True, is_split_into_words=True
     )
-
     # word-token alignment は FastTokenizer経由しか使えない
     if tokenizer.is_fast:
         word_ids_batches = [
@@ -102,12 +97,10 @@ def tokenize_and_align_labels(
         ]
         label_wids = zip(label_batches, word_ids_batches)
     else:
-        # cl-tohoku のケース(WordPieceのprefixが ## であること)を想定した対応
         tokens_batches = [
             tokenizer.convert_ids_to_tokens(ids)
             for ids in tokenized_inputs["input_ids"]
         ]
-        # special_tokens = set(tokenizer.special_tokens_map.values())
         label_wids = []
         for words, tokens, tags in zip(word_batches, tokens_batches, label_batches):
             assert len(words) == len(tags)
@@ -271,10 +264,10 @@ if __name__ == "__main__":
     test_dataset = features.test_datasets
     label_list = features.label_list
 
-    import pickle
-
-    with open(os.path.join(data_dir, "dataset.pkl"), "wb") as fp:
-        pickle.dump(features.train_datasets, fp)
+    # debug
+    # import pickle
+    # with open(os.path.join(data_dir, "dataset.pkl"), "wb") as fp:
+    #     pickle.dump(features.train_datasets, fp)
 
     # Build Trainer:
     # - DataLoaderのラッパー (batcher, sampler, collator)
