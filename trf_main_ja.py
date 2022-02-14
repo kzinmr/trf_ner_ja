@@ -64,6 +64,7 @@ def align_tokens_with_words(
     _cursor = 0
     subword = ''
     for tok in tokens:
+        tok = unicodedata.normalize("NFKD", tok)
         if tok in special_tokens:
             word_ids.append(None)
         else:
