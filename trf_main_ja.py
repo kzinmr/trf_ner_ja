@@ -62,8 +62,8 @@ def align_tokens_with_words(
     """FastTokenizer の BatchEncoding.word_ids() をトークナイズ結果から計算."""
     word_ids = []
     _cursor = 0
+    subword = ''
     for tok in tokens:
-        tok = unicodedata.normalize("NFKD", tok)
         if tok in special_tokens:
             word_ids.append(None)
         else:
@@ -72,19 +72,28 @@ def align_tokens_with_words(
                 word_ids.append(_cursor)
                 _cursor += 1
             elif _word.startswith(tok):
+                subword = tok
                 word_ids.append(_cursor)
             else:
-                if tok.replace("##", "") in _word:
+                if subword + tok.replace("##", "") in _word:
+                    subword = subword + tok.replace("##", "")
                     word_ids.append(_cursor)
                 else:
                     _cursor += 1
-                    if _cursor < len(words):
-                        # 次にはあるだろうと楽観視
-                        word_ids.append(_cursor)
+                    if tok == words[_cursor] or words[_cursor].startswith(tok):
+                        subword = ''
+        #                 while _cursor < len(words) and tok != words[_cursor]:
+        #                     _cursor += 1
+                        if _cursor < len(words):
+                            word_ids.append(_cursor)
+                        else:
+                            print(words)
+                            print(tokens)
+                            raise ValueError(f"word-token alignment failed.. {_cursor} {len(words)} {tok} {words[-1]}")
                     else:
-                        print(words)
-                        print(tokens)
-                        raise ValueError("word-token alignment failed..")
+                        print(tok, words[_cursor])
+                        raise ValueError(f"word-token alignment failed.. {_cursor} {tok} {words[_cursor]}")
+
     # assertionしたいが、正規化など含めて一致をとるのが手間なため省く
     # for tok, wid in zip(tokens, word_ids):
     #     assert wid is None or tok.replace("##", "") in words[wid]
