@@ -163,6 +163,7 @@ class QuasiCoNLL2003TokenClassificationFeatures:
         # ラベルのdecoding情報
         self.label_list = dataset.label_list
         self.label2id = dataset.label2id
+        self.label2id = {v: k for k, v in self.label2id.items()}
 
         # Prepare actual input for transformers
         self.tokenizer = tokenizer
@@ -210,7 +211,7 @@ class QuasiCoNLL2003TokenClassificationFeatures:
             for d in _test_tokenized
         ]
 
-    def _tokenize_and_align_labels(self, examples) -> BatchEncoding:
+    def _tokenize_and_align_labels(self, examples):
         return tokenize_and_align_labels(
             examples,
             self.tokenizer,
