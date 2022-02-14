@@ -129,12 +129,14 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     w2t, t2w = tokenizations.get_alignments(words, tokens[1:-1])
     word_ids = [None]
     prev_wid = 0
+    max_wid = [wids[0] if len(wids)>0 else 0 for wids in t2w]
     for wids in t2w:
         if len(wids) > 0:
             word_ids.append(wids[0])
             prev_wid = wids[0]
         else:
-            word_ids.append(prev_wid + 1)  # [UNK] のケース
+            cur = min(max_wid, prev_wid + 1)
+            word_ids.append(cur)  # [UNK] のケース
             prev_wid  += 1
     word_ids.append(None)
     return word_ids
@@ -170,10 +172,7 @@ def tokenize_and_align_labels(
         for tokens, subtokens, tags in zip(
             token_batches, subtokens_batches, label_batches
         ):
-            if len(tokens) != len(tags):
-                print(len(tokens), len(tags))
-                print(tokens)
-                print(tags)
+            assert len(tokens) == len(tags)
             word_ids = align_tokens_with_words(tokens, subtokens)
             label_wids.append((tags, word_ids))
 
