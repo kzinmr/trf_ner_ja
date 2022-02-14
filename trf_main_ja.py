@@ -58,19 +58,21 @@ def seed_everything(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def pairwise(iterable):
-    # pairwise('ABCDEFG') --> AB BC CD DE EF FG
-    a, b = tee(iterable)
-    next(b, None)
-    return zip(a, b)
+
 
 def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
     """FastTokenizer の BatchEncoding.word_ids() をトークナイズ結果から計算."""
+    def _pairwise(iterable):
+        # pairwise('ABCDEFG') --> AB BC CD DE EF FG
+        a, b = tee(iterable)
+        next(b, None)
+        return zip(a, b)
+
     special_tokens = ["[CLS]", "[SEP]"]
     word_ids = []
     _cursor = 0
     subword = ""
-    for tok, next_tok in pairwise(tokens):
+    for tok, next_tok in _pairwise(tokens):
         tok = re.sub(" +", "", tok)
         _word = words[_cursor]
         _word = zen_to_han(_word, kana=False, ascii=True, digit=True)
@@ -93,16 +95,10 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
                     _cursor += 1
                     __word = words[_cursor]
                     __word = zen_to_han(__word, kana=False, ascii=True, digit=True)
-                    if tok == __word or tok == "[UNK]" or __word.startswith(tok):
+                    if tok == __word or tok == "[UNK]":
                         subword = ""
-                        if _cursor < len(words):
-                            word_ids.append(_cursor)
-                        else:
-                            print(words)
-                            print(tokens)
-                            raise ValueError(
-                                f"word-token alignment failed.. {_cursor} {len(words)} {tok} {words[-1]}"
-                            )
+                    elif __word.startswith(tok):
+                        subword = tok
                     else:
                         print(tok, words[_cursor])
                         print(words)
@@ -110,6 +106,16 @@ def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
                         raise ValueError(
                             f"word-token alignment failed.. {_cursor} {tok} {words[_cursor]}"
                         )
+
+                    if _cursor < len(words):
+                        word_ids.append(_cursor)
+                    else:
+                        print(words)
+                        print(tokens)
+                        raise ValueError(
+                            f"word-token alignment failed.. {_cursor} {len(words)} {tok} {words[-1]}"
+                        )
+
 
     # assertionしたいが、正規化など含めて一致をとるのが手間なため省く
     # for tok, wid in zip(tokens, word_ids):
