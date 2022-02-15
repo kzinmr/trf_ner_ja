@@ -105,16 +105,17 @@ class SlowEncoder:
             for sent in token_windows
         ]
         tokens_batches = [
-            self.tokenizer.convert_ids_to_tokens(enc["input_ids"])
-            for enc in encodings
+            self.tokenizer.convert_ids_to_tokens(enc["input_ids"]) for enc in encodings
         ]
         print(tokens_batches)
         dataset = [
             {"input_ids": enc["input_ids"], "attention_mask": enc["attention_mask"]}
             for enc in encodings
         ]
+        # NOTE: [CLS] and [SEP] に対応するダミーtupleを追加
         offset_mapping = [
-            [(tok.start, tok.end) for tok in toks] for toks in sentence_windows
+            [(0, 0)] + [(tok.start, tok.end) for tok in toks] + [(-1, -1)]
+            for toks in sentence_windows
         ]
         return dataset, offset_mapping
 
