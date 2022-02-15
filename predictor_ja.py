@@ -163,7 +163,7 @@ class TrfNERSlow:
 if __name__ == "__main__":
 
     data_dir = "/app/workspace/"
-    pkl_path = os.path.join(data_dir, "predictor_en.pkl")
+    pkl_path = os.path.join(data_dir, "predictor_ja.pkl")
     predictor = TrfNERSlow(pkl_path)
 
     sent = """特定供給者パワーステーション株式会社（以下「甲」という。）と一般電気事業者又は
