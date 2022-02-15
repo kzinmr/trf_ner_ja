@@ -104,6 +104,11 @@ class SlowEncoder:
             )
             for sent in token_windows
         ]
+        tokens_batches = [
+            self.tokenizer.convert_ids_to_tokens(enc["input_ids"])
+            for enc in encodings
+        ]
+        print(tokens_batches)
         dataset = [
             {"input_ids": enc["input_ids"], "attention_mask": enc["attention_mask"]}
             for enc in encodings
