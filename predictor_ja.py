@@ -217,7 +217,7 @@ class SlowEncoder:
         ]
         # NOTE: [CLS] and [SEP] は含まない；[UNK] は含みうる
         tokens_in_windows = []
-        for n_stride, (words, tokens) in enumerate(
+        for ix_w, (words, tokens) in enumerate(
             zip(words_in_windows, tokens_batches)
         ):
             _tokens = tokens[1:-1]  # [CLS],[SEP]を省く
@@ -225,12 +225,13 @@ class SlowEncoder:
             words_str = [w.text for w in words]
             word_ids = self.align_tokens_with_words(words_str, _tokens)
             # NOTE: window内->元文内の位置スパン、トークンでなく単語単位の位置スパンを登録
-            word_spans = [(w.start, w.end) for w in words]
-            window_offset = n_stride * (self.max_length - 2 - self.window_stride)
+            window_offset = ix_w * (self.max_length - self.window_stride)
+            words_start_pos_sentence = [w.start + window_offset for w in words]
+            
             token_word_labels = []
             for tok, wid in zip(_tokens, word_ids):
                 word_text = words_str[wid]
-                start_pos_sentence = word_spans[wid][0] + window_offset
+                start_pos_sentence = words_start_pos_sentence[wid]
                 token_word_labels.append(
                     TokenLabelPair.build(
                         text=tok,
