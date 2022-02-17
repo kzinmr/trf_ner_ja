@@ -124,7 +124,7 @@ class FastEncoder:
         for _enc, spans in zip(enc.encodings, enc.offset_mapping):
             token_labels = []
             for wid, (start, end) in zip(_enc.word_ids[1:-1], spans[1:-1]):
-                word_start_pos, word_end_pos = _enc.word_to_chars[wid]
+                word_start_pos, word_end_pos = _enc.word_to_chars(wid)
                 word_text = sentence_text[word_start_pos:word_end_pos]
                 token_labels.append(
                     TokenLabelPair.build(
