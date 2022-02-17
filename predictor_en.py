@@ -123,6 +123,7 @@ class FastEncoder:
         tokens_in_windows = []
         for _enc, spans in zip(enc.encodings, enc.offset_mapping):
             token_labels = []
+            # skipping [CLS] and [SEP]
             for wid, (start, end) in zip(_enc.word_ids[1:-1], spans[1:-1]):
                 word_start_pos, word_end_pos = _enc.word_to_chars(wid)
                 word_text = sentence_text[word_start_pos:word_end_pos]
@@ -225,11 +226,12 @@ class FastDecoder:
             for out in outputs
         ]
         # unbatch & restore label text
+        # skipping special characters [CLS] and [SEP]
         labels_list = [
-            [self.id2label[li] for li in label_ids]
+            [self.id2label[li] for li in label_ids][1:-1]
             for label_ids in chain.from_iterable(batch_label_ids)
         ]
-        # align with token text, skipping special characters
+        # update by predicted labels in each tokens
         tokens_in_windows = self.update_labels(tokens_in_windows, labels_list)
 
         tokens_in_sentence = self.unwindow(tokens_in_windows)
