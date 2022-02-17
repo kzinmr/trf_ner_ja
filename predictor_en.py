@@ -2,7 +2,7 @@ import os
 import pickle
 from dataclasses import dataclass
 from itertools import chain, tee
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import torch
 from torch.utils.data.dataloader import DataLoader

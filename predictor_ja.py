@@ -3,7 +3,7 @@ import os
 import pickle
 from dataclasses import dataclass
 from itertools import chain, tee
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import fugashi
 import unidic_lite
