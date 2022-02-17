@@ -1,19 +1,94 @@
+from collections import defaultdict
 import os
 import pickle
-from typing import Dict, List
+from dataclasses import dataclass
+from itertools import chain, tee
+from typing import Dict, List, Optional, Tuple
 
 import fugashi
 import unidic_lite
+import tokenizations
+import torch
+from torch.utils.data.dataloader import DataLoader
+from torch.utils.data.sampler import SequentialSampler
 from transformers import (
     AutoModelForTokenClassification,
     AutoTokenizer,
+    DataCollatorWithPadding,
     PreTrainedTokenizer,
 )
 
-from predictor_en import Decoder, Predictor, Token, TokenLabelPair
+
+# from predictor_en import Decoder, Predictor, Token, TokenLabelPair
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+
+@dataclass
+class Token:
+    text: str
+    start: int
+    end: Optional[int] = None
+
+
+@dataclass
+class TokenLabelPair:
+    token: Token
+    label: str
+    word_text: Optional[str] = None
+    word_start_pos: Optional[int] = None
+
+    @staticmethod
+    def build(
+        text: str,
+        start_pos: int,
+        label: str,
+        word_text: Optional[str] = None,
+        word_start_pos: Optional[int] = None,
+    ):
+        # NOTE: tokenによってはend位置計算ができないことがある
+        end_pos = None
+        if text != "[UNK]" and not text.startswith("##"):
+            end_pos = start_pos + len(text)
+        return TokenLabelPair(
+            Token(text, start_pos, end_pos), label, word_text, word_start_pos
+        )
+
+    @property
+    def text(self) -> str:
+        return self.token.text
+
+    @property
+    def start_pos(self) -> int:
+        return self.token.start
+
+    @property
+    def is_unreliable_token_pos(self) -> bool:
+        # サブワードtokenや[UNK]tokenは位置スパンを登録できない
+        return self.start_pos >= 0
+
+    @property
+    def end_pos(self) -> Optional[int]:
+        # サブワードtokenや[UNK]tokenはend位置が計算できない
+        if not self.is_unreliable_token_pos:
+            return self.token.end
+        else:
+            return None
+
+    @property
+    def word_end_pos(self) -> Optional[int]:
+        if self.word_start_pos and self.word_text:
+            return self.word_start_pos + len(self.word_text)
+        else:
+            return None
+
+
+def pairwise(iterable):
+    # pairwise('ABCDEFG') --> AB BC CD DE EF FG
+    a, b = tee(iterable)
+    next(b, None)
+    return zip(a, b)
 
 
 class MeCabPreTokenizer:
@@ -80,44 +155,269 @@ class SlowEncoder:
         self.max_length = max_length
         self.window_stride = window_stride
 
+    @staticmethod
+    def align_tokens_with_words(words: List[str], tokens: List[str]) -> List[int]:
+        # tokens側は[CLS],[SEP]含まない想定
+        w2t, t2w = tokenizations.get_alignments(words, tokens)
+        word_ids = []
+        prev_wid = 0
+        max_wid = max([wids[0] if len(wids) > 0 else 0 for wids in t2w])
+        for token, wids in zip(tokens, t2w):
+            if len(wids) > 0:
+                word_ids.append(wids[0])
+                prev_wid = wids[0]
+            elif token == "[UNK]":
+                # [UNK] のケースはなるべく近いidで内挿する
+                cur = min(max_wid, prev_wid + 1)
+                word_ids.append(cur)
+                prev_wid += 1
+            else:  # '[PAD]'
+                word_ids.append(None)
+        return word_ids
+
     def encode(self, sentence_text: str):
         """Tokenizationを用いてテキストをトークナイズ・Tensor化する。
         NOTE: デコーディングのために offset_mapping も保持する。
         NOTE: 長文の対策として、ストライド付きウィンドウ分割も行う。
         """
         # sentence -> [sentence_window(max_length, window_stride)]
-        sentence_windows = self.pretokenizer.window_by_tokens(
+        words_in_windows = self.pretokenizer.window_by_tokens(
             sentence_text, self.max_length - 2, self.window_stride
         )
-        token_windows = ["".join(tok.text for tok in toks) for toks in sentence_windows]
+        word_str_in_windows = [[tok.text for tok in ws] for ws in words_in_windows]
         encodings = [
             self.tokenizer(
-                sent,
+                words_in_window,
                 padding=True,
                 truncation=True,
                 max_length=self.max_length,
+                is_split_into_words=True,  # 分かち書き済み
                 # stride=self.window_stride,  # fast-only
                 # return_overflowing_tokens=True,  # fast-only
+                # return_offsets_mapping=True,  # fast-only
                 add_special_tokens=True,
                 return_token_type_ids=False,
                 return_length=True,
             )
-            for sent in token_windows
+            for words_in_window in word_str_in_windows
         ]
-        tokens_batches = [
-            self.tokenizer.convert_ids_to_tokens(enc["input_ids"]) for enc in encodings
-        ]
-        print(tokens_batches)
+        # NOTE: [CLS] and [SEP] は含む (予測時に必要(ほんとか?))
         dataset = [
             {"input_ids": enc["input_ids"], "attention_mask": enc["attention_mask"]}
             for enc in encodings
         ]
-        # NOTE: [CLS] and [SEP] に対応するダミーtupleを追加
-        offset_mapping = [
-            [(0, 0)] + [(tok.start, tok.end) for tok in toks] + [(-1, -1)]
-            for toks in sentence_windows
+        # SlowTokenizerの場合、トークンの文内位置スパンが計算できないため複雑な処理が挟まる.
+        # - token.start_pos/end_posは信頼できない形で使う必要あるため、信頼できる単語単位を登録する
+        #   - トークン位置スパンが計算できない理由としては、[UNK]トークンの存在やサブワードの存在による.
+        # - また、窓ごとの位置スパンでなく、元の文内の位置スパンを計算する必要がある点も注意.
+        # - FastTokenizerでは、トークナイザ内部の機構で窓分割&元文内位置スパンを保持した計算がされる.
+        tokens_batches: List[List[str]] = [
+            self.tokenizer.convert_ids_to_tokens(enc["input_ids"]) for enc in encodings
         ]
-        return dataset, offset_mapping
+        # NOTE: [CLS] and [SEP] は含まない；[UNK] は含みうる
+        tokens_in_windows = []
+        for n_stride, (words, tokens) in enumerate(
+            zip(words_in_windows, tokens_batches)
+        ):
+            _tokens = tokens[1:-1]  # [CLS],[SEP]を省く
+            # 信頼できる単語単位を登録するために、トークン-単語のアラインメントをとる
+            words_str = [w.text for w in words]
+            word_ids = self.align_tokens_with_words(words_str, _tokens)
+            # NOTE: window内->元文内の位置スパン、トークンでなく単語単位の位置スパンを登録
+            word_spans = [(w.start, w.end) for w in words]
+            window_offset = n_stride * self.window_stride
+            token_word_labels = []
+            for tok, wid in zip(_tokens, word_ids):
+                word_text = words_str[wid]
+                start_pos_sentence = word_spans[wid][0] + window_offset
+                token_word_labels.append(
+                    TokenLabelPair.build(
+                        text=tok,
+                        start_pos=-1,  # Unreliable
+                        label="O",
+                        word_text=word_text,
+                        word_start_pos=start_pos_sentence,
+                    )
+                )
+            tokens_in_windows.append(token_word_labels)
+
+        return dataset, tokens_in_windows
+
+
+class SlowDecoder:
+    id2label: Dict[int, str]
+    window_stride: int
+
+    def __init__(self, id2label: Dict[int, str], window_stride: int):
+        self.id2label = id2label
+        self.window_stride = window_stride
+
+    def unwindow(
+        self, tokens_in_windows: List[List[TokenLabelPair]]
+    ) -> List[TokenLabelPair]:
+        """ window毎の予測結果を、連続した一文内の予測結果に変換する. """
+        window_stride = self.window_stride
+
+        def _merge_label_pair(left: str, right: str) -> str:
+            """I>B>Oの順序関係の下でペアのmaxをとる"""
+            left_bio = left.split("-")[0]
+            right_bio = right.split("-")[0]
+            if left == right:
+                return left
+            elif left_bio == "I" or right_bio == "I":
+                return left if left_bio == "I" else right
+            elif left_bio == "B" or right_bio == "B":
+                return left if left_bio == "B" else right
+            else:
+                return "O"
+
+        tokens_in_sentence: List[TokenLabelPair] = []
+        if len(tokens_in_windows) == 1:
+            tokens_in_sentence = tokens_in_windows[0]
+        elif len(tokens_in_windows) > 1:
+            # windowが複数ある場合、strideぶん被っているwindow境界のラベルをマージする
+            startpos2token: Dict[int, TokenLabelPair] = {}
+            for prev_w, next_w in pairwise(tokens_in_windows):
+                for token_label in prev_w:
+                    if token_label.token.start not in startpos2token:
+                        startpos2token[token_label.token.start] = token_label
+
+                for prev_token_label, next_token_label in zip(
+                    prev_w[-window_stride:], next_w[:window_stride]
+                ):
+                    start_pos = prev_token_label.token.start
+                    merged_label = _merge_label_pair(
+                        prev_token_label.label, next_token_label.label
+                    )
+                    startpos2token[start_pos] = TokenLabelPair.build(
+                        prev_token_label.token.text, start_pos, merged_label
+                    )
+            for token_label in tokens_in_windows[-1]:
+                if token_label.token.start not in startpos2token:
+                    startpos2token[token_label.token.start] = token_label
+
+            tokens_in_sentence = [
+                v for _, v in sorted(startpos2token.items(), key=lambda x: x[0])
+            ]
+
+        return tokens_in_sentence
+
+    def update_labels(
+        self,
+        tokens_in_windows: List[List[TokenLabelPair]],
+        labels_list: List[List[str]],
+    ) -> List[List[TokenLabelPair]]:
+        """ トークン-ラベルペアリストに対して、ラベル属性に予測結果ラベルを書き込む処理 """
+
+        def _bio_sorter(x: str):
+            if x.startswith("O"):
+                return "1"
+            else:
+                return "-".join(x.split("-")[::-1])
+
+        def _merge_bio_labels(labels_in_word: List[str]) -> str:
+            labels_sorted = sorted(labels_in_word, key=_bio_sorter)
+            if all(l == "O" for l in labels_sorted):
+                return "O"
+            else:
+                return [l for l in labels_sorted if l != "O"][0]
+
+        # SlowTokenizerの場合、トークンの文内位置スパンが計算できないため複雑な処理が挟まる.
+        # - unwindow処理でtoken.start_pos/end_posを信頼できる形で使う必要あるため、信頼できる単語単位に戻す
+        # - 位置スパンが計算できない理由としては、[UNK]トークンの存在やサブワードの存在による.
+        # - FastTokenizerでは、トークナイザ内部の機構で文内位置スパンを保持した計算がされるため、この箇所は不要
+
+        word_labels_in_windows = []
+        for token_labels, labels in zip(tokens_in_windows, labels_list):
+            # 単語サブワード内のBIOラベルを、単語単位B-XXX>I-XXX>Oの順で代表させる処理
+            _word_pos2word_labels = defaultdict(list)
+            for token_label, label in zip(token_labels, labels):
+                _word_pos2word_labels[token_label.word_start_pos].append(
+                    (token_label.word_text, label)
+                )
+            _word_pos2word_label = {
+                wpos: (wtext, _merge_bio_labels(wlabels))
+                for wpos, (wtext, wlabels) in _word_pos2word_labels.items()
+            }
+            # 単語単位の予測結果に書き換える
+            word_labels = [
+                TokenLabelPair.build(
+                    word_text,
+                    word_start_pos,
+                    wlabel,
+                    word_start_pos=word_start_pos,
+                    word_text=word_text,
+                )
+                for word_start_pos, (word_text, wlabel) in sorted(
+                    _word_pos2word_label.items(), key=lambda x: x[0]
+                )
+            ]
+            word_labels_in_windows.append(word_labels)
+        return word_labels_in_windows
+
+    def decode(
+        self,
+        tokens_in_windows: List[List[TokenLabelPair]],
+        outputs: List,
+    ) -> List[TokenLabelPair]:
+        # decode logits into label ids
+        batch_label_ids = [
+            torch.argmax(out.logits, axis=2).detach().numpy().tolist()
+            for out in outputs
+        ]
+        # unbatch & restore label text
+        labels_list = [
+            [self.id2label[li] for li in label_ids]
+            for label_ids in chain.from_iterable(batch_label_ids)
+        ]
+        # align with token text, skipping special characters
+        tokens_in_windows = self.update_labels(tokens_in_windows, labels_list)
+        # window -> sentence
+        tokens_in_sentence = self.unwindow(tokens_in_windows)
+        return tokens_in_sentence
+
+
+class Predictor:
+    tokenizer: AutoTokenizer
+    model: AutoModelForTokenClassification
+    batch_size: int
+    max_length: int
+
+    def __init__(
+        self,
+        tokenizer: AutoTokenizer,
+        model: AutoModelForTokenClassification,
+        batch_size: int,
+        max_length: int,
+    ):
+        self.tokenizer = tokenizer
+        self.model = model
+        self.batch_size = batch_size
+        self.max_length = max_length
+
+    def predict(self, dataset: List[dict]) -> List:
+        """ Dataset(Tensor) から Dataloader を構成し、数値予測を行う. """
+
+        # 予測なのでシャッフルなしのサンプラーを使用
+        sampler = SequentialSampler(dataset)
+        # DataCollatorWithPadding:
+        # - 各バッチサンプルに対して tokenizer.pad() が呼ばれ、torch.Tensorが返される
+        # - バッチ内のラベルは削除される (See. DataCollatorForTokenClassification)
+        data_collator = DataCollatorWithPadding(
+            self.tokenizer, padding=True, max_length=self.max_length
+        )
+        dl = DataLoader(
+            dataset,
+            sampler=sampler,
+            batch_size=self.batch_size,
+            drop_last=False,
+            collate_fn=data_collator,
+            pin_memory=True,
+        )
+
+        outputs = [self.model(**b) for b in dl]
+
+        return outputs
 
 
 class TrfNERSlow:
@@ -140,7 +440,7 @@ class TrfNERSlow:
         # pipeline
         self.encoder = SlowEncoder(self.tokenizer, max_length, window_stride)
         self.predictor = Predictor(self.tokenizer, self.model, batch_size, max_length)
-        self.decoder = Decoder(id2label, window_stride)
+        self.decoder = SlowDecoder(id2label, window_stride)
 
     @staticmethod
     def pickle_bert_model(model_dir: str, model_out_path: str):
@@ -160,9 +460,9 @@ class TrfNERSlow:
         - 長文でもstride付きwindowに区切り(tokenizer)、バッチで予測する(dataloader)
         - windowの境界については予測結果をマージする
         """
-        dataset, offset_mapping = self.encoder.encode(sentence_text)
+        dataset, tokens_in_windows = self.encoder.encode(sentence_text)
         outputs = self.predictor.predict(dataset)
-        tokens_in_sentence = self.decoder.decode(sentence_text, offset_mapping, outputs)
+        tokens_in_sentence = self.decoder.decode(tokens_in_windows, outputs)
         return tokens_in_sentence
 
 

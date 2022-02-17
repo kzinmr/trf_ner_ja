@@ -2,7 +2,7 @@ import os
 import pickle
 from dataclasses import dataclass
 from itertools import chain, tee
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch.utils.data.dataloader import DataLoader
@@ -30,26 +30,58 @@ def pairwise(iterable):
 class Token:
     text: str
     start: int
-    end: int
+    end: Optional[int] = None
 
 
 @dataclass
 class TokenLabelPair:
     token: Token
     label: str
+    word_text: Optional[str] = None
+    word_start_pos: Optional[int] = None
 
     @staticmethod
-    def build(text: str, start_pos: int, label: str):
-        end_pos = start_pos + len(text)
-        return TokenLabelPair(Token(text, start_pos, end_pos), label)
+    def build(
+        text: str,
+        start_pos: int,
+        label: str,
+        word_text: Optional[str] = None,
+        word_start_pos: Optional[int] = None,
+    ):
+        # NOTE: tokenによってはend位置計算ができないことがある
+        end_pos = None
+        if text != "[UNK]" and not text.startswith("##"):
+            end_pos = start_pos + len(text)
+        return TokenLabelPair(
+            Token(text, start_pos, end_pos), label, word_text, word_start_pos
+        )
+
+    @property
+    def text(self) -> str:
+        return self.token.text
 
     @property
     def start_pos(self) -> int:
         return self.token.start
 
     @property
-    def end_pos(self) -> int:
-        return self.token.end
+    def end_pos(self) -> Optional[int]:
+        # NOTE: tokenによってはend位置が信頼できないおそれがある
+        if (
+            self.token.text != "[UNK]"
+            and not self.token.text.startswith("##")
+            and self.token.end
+        ):
+            return self.token.end
+        else:
+            return None
+
+    @property
+    def word_end_pos(self) -> Optional[int]:
+        if self.word_start_pos and self.word_text:
+            return self.word_start_pos + len(self.word_text)
+        else:
+            return None
 
 
 class FastEncoder:
@@ -68,32 +100,65 @@ class FastEncoder:
         NOTE: 長文の対策として、ストライド付きウィンドウ分割も行う。
         """
         # sentence -> [sentence_window(max_length, window_stride)]
+        assert self.window_stride < self.max_length - 2
         enc: BatchEncoding = self.tokenizer(
             sentence_text,
             padding=True,
             truncation=True,
             max_length=self.max_length,
-            stride=self.window_stride,
-            return_overflowing_tokens=True,
+            stride=self.window_stride,  # fast-only
+            return_overflowing_tokens=True,  # fast-only
+            return_offsets_mapping=True,  # fast-only
             add_special_tokens=True,
-            return_offsets_mapping=True,
             return_token_type_ids=False,
             return_length=True,
         )
+        # NOTE: [CLS] and [SEP] は含む
         dataset = [
             {"input_ids": encoding.ids, "attention_mask": encoding.attention_mask}
             for encoding in enc.encodings
         ]
-        return dataset, enc.offset_mapping
+        # NOTE: [CLS] and [SEP] は含まない
+        # 単語の情報は予測時には冗長だが分析用途のため登録しておく
+        tokens_in_windows = [
+            [
+                TokenLabelPair.build(
+                    sentence_text[start:end],
+                    start,
+                    "O",
+                    word_start_pos=_enc.word_to_chars[wid][0],
+                    word_text=sentence_text[
+                        _enc.word_to_chars[wid][0] : _enc.word_to_chars[wid][1]
+                    ],
+                )
+                for wid, (start, end) in zip(_enc.word_ids[1:-1], spans[1:-1])
+            ]
+            for _enc, spans in zip(enc.encodings, enc.offset_mapping)
+        ]
+        return dataset, tokens_in_windows
 
 
-class Decoder:
+class FastDecoder:
     id2label: Dict[int, str]
     window_stride: int
 
     def __init__(self, id2label: Dict[int, str], window_stride: int):
         self.id2label = id2label
         self.window_stride = window_stride
+
+    def update_labels(
+        self,
+        tokens_in_windows: List[List[TokenLabelPair]],
+        labels_list: List[List[str]],
+    ) -> List[List[TokenLabelPair]]:
+        """ トークン-ラベルペアリストに対して、ラベル属性に予測結果ラベルを書き込む処理 """
+        return [
+            [
+                TokenLabelPair.build(token_label.text, token_label.start_pos, label)
+                for token_label, label in zip(token_labels, labels)
+            ]
+            for token_labels, labels in zip(tokens_in_windows, labels_list)
+        ]
 
     def unwindow(
         self, tokens_in_windows: List[List[TokenLabelPair]]
@@ -131,7 +196,9 @@ class Decoder:
                     prev_w[-window_stride:], next_w[:window_stride]
                 ):
                     start_pos = prev_token_label.token.start
-                    merged_label = _merge_label_pair(prev_token_label.label, next_token_label.label)
+                    merged_label = _merge_label_pair(
+                        prev_token_label.label, next_token_label.label
+                    )
                     startpos2token[start_pos] = TokenLabelPair.build(
                         prev_token_label.token.text, start_pos, merged_label
                     )
@@ -147,8 +214,7 @@ class Decoder:
 
     def decode(
         self,
-        sentence_text: str,
-        offset_mapping: List[List[Tuple[int, int]]],
+        tokens_in_windows: List[List[TokenLabelPair]],
         outputs: List,
     ) -> List[TokenLabelPair]:
         # decode logits into label ids
@@ -162,16 +228,8 @@ class Decoder:
             for label_ids in chain.from_iterable(batch_label_ids)
         ]
         # align with token text, skipping special characters
-        # NOTE: Token := token文字列およびその位置とBIOタグのコンテナ
-        tokens_in_windows = [
-            [
-                TokenLabelPair.build(sentence_text[start:end], start, label)
-                for (start, end), label in zip(
-                    spans[1:-1], labels[1:-1]
-                )  # skip [CLS] and [SEP] (予測が-100である保証はない)
-            ]
-            for spans, labels in zip(offset_mapping, labels_list)
-        ]
+        tokens_in_windows = self.update_labels(tokens_in_windows, labels_list)
+
         tokens_in_sentence = self.unwindow(tokens_in_windows)
         return tokens_in_sentence
 
@@ -239,7 +297,7 @@ class TrfNERFast:
         # pipeline
         self.encoder = FastEncoder(self.tokenizer, max_length, window_stride)
         self.predictor = Predictor(self.tokenizer, self.model, batch_size, max_length)
-        self.decoder = Decoder(id2label, window_stride)
+        self.decoder = FastDecoder(id2label, window_stride)
 
     @staticmethod
     def pickle_bert_model(model_dir: str, model_out_path: str):
