@@ -365,6 +365,7 @@ if __name__ == "__main__":
     ]
     sent = " ".join(tokens)
     tokens_in_sentence = predictor.predict(sent)
-    print(tokens_in_sentence)
+    for t_l in tokens_in_sentence:
+        print(t_l)
     for t_l in tokens_in_sentence:
         print(t_l.token.text, t_l.label)

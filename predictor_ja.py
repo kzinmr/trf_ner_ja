@@ -484,6 +484,7 @@ if __name__ == "__main__":
 る調達並びに甲の発電設備と乙の電力系統との接続等に関して、次のとおり契約（以下「本
 契約」という。）を締結する。"""
     tokens_in_sentence = predictor.predict(sent)
-    print(tokens_in_sentence)
+    for t_l in tokens_in_sentence:
+        print(t_l)
     for t_l in tokens_in_sentence:
         print(t_l.token.text, t_l.label)
