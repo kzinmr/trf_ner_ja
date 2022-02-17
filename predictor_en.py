@@ -120,21 +120,23 @@ class FastEncoder:
         ]
         # NOTE: [CLS] and [SEP] は含まない
         # 単語の情報は予測時には冗長だが分析用途のため登録しておく
-        tokens_in_windows = [
-            [
-                TokenLabelPair.build(
-                    sentence_text[start:end],
-                    start,
-                    "O",
-                    word_start_pos=_enc.word_to_chars[wid][0],
-                    word_text=sentence_text[
-                        _enc.word_to_chars[wid][0] : _enc.word_to_chars[wid][1]
-                    ],
+        tokens_in_windows = []
+        for _enc, spans in zip(enc.encodings, enc.offset_mapping):
+            token_labels = []
+            for wid, (start, end) in zip(_enc.word_ids[1:-1], spans[1:-1]):
+                word_start_pos, word_end_pos = _enc.word_to_chars[wid]
+                word_text = sentence_text[word_start_pos:word_end_pos]
+                token_labels.append(
+                    TokenLabelPair.build(
+                        sentence_text[start:end],
+                        start,
+                        "O",
+                        word_start_pos=word_start_pos,
+                        word_text=word_text,
+                    )
                 )
-                for wid, (start, end) in zip(_enc.word_ids[1:-1], spans[1:-1])
-            ]
-            for _enc, spans in zip(enc.encodings, enc.offset_mapping)
-        ]
+            tokens_in_windows.append(token_labels)
+
         return dataset, tokens_in_windows
 
 
