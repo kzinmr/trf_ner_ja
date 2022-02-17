@@ -226,7 +226,7 @@ class SlowEncoder:
             word_ids = self.align_tokens_with_words(words_str, _tokens)
             # NOTE: window内->元文内の位置スパン、トークンでなく単語単位の位置スパンを登録
             word_spans = [(w.start, w.end) for w in words]
-            window_offset = (self.max_length - 2 - n_stride) * self.window_stride
+            window_offset = n_stride * (self.max_length - 2 - self.window_stride)
             token_word_labels = []
             for tok, wid in zip(_tokens, word_ids):
                 word_text = words_str[wid]
