@@ -318,9 +318,9 @@ class TrfNERFast:
         - 長文でもstride付きwindowに区切り(tokenizer)、バッチで予測する(dataloader)
         - windowの境界については予測結果をマージする
         """
-        dataset, offset_mapping = self.encoder.encode(sentence_text)
+        dataset, tokens_in_windows = self.encoder.encode(sentence_text)
         outputs = self.predictor.predict(dataset)
-        tokens_in_sentence = self.decoder.decode(sentence_text, offset_mapping, outputs)
+        tokens_in_sentence = self.decoder.decode(tokens_in_windows, outputs)
         return tokens_in_sentence
 
 
