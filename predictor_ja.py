@@ -366,11 +366,12 @@ class SlowDecoder:
             for out in outputs
         ]
         # unbatch & restore label text
+        # skipping special characters [CLS] and [SEP]
         labels_list = [
-            [self.id2label[li] for li in label_ids]
+            [self.id2label[li] for li in label_ids][1:-1]
             for label_ids in chain.from_iterable(batch_label_ids)
         ]
-        # align with token text, skipping special characters
+        # update by predicted labels in each words (not tokens)
         tokens_in_windows = self.update_labels(tokens_in_windows, labels_list)
         # window -> sentence
         tokens_in_sentence = self.unwindow(tokens_in_windows)
