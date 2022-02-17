@@ -121,7 +121,7 @@ class MeCabPreTokenizer:
         self,
         sentence: str,
         max_length: int = 128,
-        window_stride: int = 5,
+        window_stride: int = 8,
     ) -> List[List[Token]]:
         """一文のデータが長い場合にストライド付き固定長分割を施す処理."""
         tokens = self.tokenize_with_alignment(sentence)
@@ -132,7 +132,7 @@ class MeCabPreTokenizer:
         else:
             sentence_windows = []
             # max_length を窓幅, window_strideをストライド幅とする固定長に分割
-            for start in range(0, seq_length, window_stride):
+            for start in range(0, seq_length, seq_length - window_stride):
                 end = min(start + max_length, seq_length)
                 if end - start == max_length:
                     window = tokens[start:end]
@@ -225,7 +225,7 @@ class SlowEncoder:
             words_str = [w.text for w in words]
             word_ids = self.align_tokens_with_words(words_str, _tokens)
             # NOTE: window内->元文内の位置スパン、トークンでなく単語単位の位置スパンを登録
-            window_offset = ix_w * (self.max_length - self.window_stride)
+            window_offset = ix_w * (self.max_length - 2 - self.window_stride)
             words_start_pos_sentence = [w.start + window_offset for w in words]
             
             token_word_labels = []
