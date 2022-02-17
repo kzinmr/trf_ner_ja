@@ -176,16 +176,17 @@ class SlowEncoder:
         return word_ids
 
     def encode(self, sentence_text: str):
-        """Tokenizationを用いてテキストをトークナイズ・Tensor化する。
-        NOTE: デコーディングのために offset_mapping も保持する。
-        NOTE: 長文の対策として、ストライド付きウィンドウ分割も行う。
-        """
-        # sentence -> [sentence_window(max_length, window_stride)]
+        """SlowTokenizerによりテキストをトークナイズ・Tensor化する。"""
         assert self.window_stride < self.max_length - 2
+        # NOTE: デコーディングのために、トークン→元文字列へのスパンを保持したい、が
+        # 実際得られるのは、単語→window文字列(PreTokenizer)とトークン→単語(SlowTokenizer)の対応のみ
+        # 結果、処理が複雑化してしまう
+        # NOTE: 長文のメモリ溢れ対策として、ストライド付きウィンドウ分割を行う.
         words_in_windows = self.pretokenizer.window_by_tokens(
             sentence_text, self.max_length - 2, self.window_stride
         )
         word_str_in_windows = [[tok.text for tok in ws] for ws in words_in_windows]
+        # PreTokenizerでwindow分割および単語→window文字列対応をとるため、窓ごとのtokenizer適用となる.
         encodings = [
             self.tokenizer(
                 words_in_window,
@@ -217,9 +218,7 @@ class SlowEncoder:
         ]
         # NOTE: [CLS] and [SEP] は含まない；[UNK] は含みうる
         tokens_in_windows = []
-        for ix_w, (words, tokens) in enumerate(
-            zip(words_in_windows, tokens_batches)
-        ):
+        for ix_w, (words, tokens) in enumerate(zip(words_in_windows, tokens_batches)):
             _tokens = tokens[1:-1]  # [CLS],[SEP]を省く
             # 信頼できる単語単位を登録するために、トークン-単語のアラインメントをとる
             words_str = [w.text for w in words]
@@ -227,7 +226,7 @@ class SlowEncoder:
             # NOTE: window内->元文内の位置スパン、トークンでなく単語単位の位置スパンを登録
             window_offset = ix_w * (self.max_length - 2 - self.window_stride)
             words_start_pos_sentence = [w.start + window_offset for w in words]
-            
+
             token_word_labels = []
             for tok, wid in zip(_tokens, word_ids):
                 word_text = words_str[wid]

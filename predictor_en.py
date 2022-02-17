@@ -95,12 +95,10 @@ class FastEncoder:
         self.window_stride = window_stride
 
     def encode(self, sentence_text: str):
-        """Tokenizationを用いてテキストをトークナイズ・Tensor化する。
-        NOTE: デコーディングのために offset_mapping も保持する。
-        NOTE: 長文の対策として、ストライド付きウィンドウ分割も行う。
-        """
-        # sentence -> [sentence_window(max_length, window_stride)]
+        """FastTokenizerによりテキストをトークナイズ・Tensor化する。"""
         assert self.window_stride < self.max_length - 2
+        # NOTE: デコーディングのために、元文字列を解析しつつoffset_mappingを保持.
+        # NOTE: 長文のメモリ溢れ対策として、ストライド付きウィンドウ分割を行う.
         enc: BatchEncoding = self.tokenizer(
             sentence_text,
             padding=True,
