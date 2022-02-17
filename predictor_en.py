@@ -1,3 +1,4 @@
+import gc
 import os
 import pickle
 from dataclasses import dataclass
@@ -219,10 +220,13 @@ class FastDecoder:
         outputs: List,
     ) -> List[TokenLabelPair]:
         # decode logits into label ids
-        batch_label_ids = [
-            torch.argmax(out.logits, axis=2).detach().numpy().tolist()
-            for out in outputs
-        ]
+        batch_label_ids = []
+        for out in outputs:
+            label_ids = torch.argmax(out.logits, axis=2).detach().numpy().tolist()
+            batch_label_ids.append(label_ids)
+            # NOTE: memory error対策
+            del out
+            gc.collect()
         # unbatch & restore label text
         # skipping special characters [CLS] and [SEP]
         labels_list = [
