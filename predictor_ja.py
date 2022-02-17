@@ -336,8 +336,11 @@ class SlowDecoder:
                     (token_label.word_text, label)
                 )
             _word_pos2word_label = {
-                wpos: (wtext, _merge_bio_labels(wlabels))
-                for wpos, (wtext, wlabels) in _word_pos2word_labels.items()
+                wpos: (
+                    w_text_labels[0][0],
+                    _merge_bio_labels([l for _, l in w_text_labels]),
+                )
+                for wpos, (w_text_labels) in _word_pos2word_labels.items()
             }
             # 単語単位の予測結果に書き換える
             word_labels = [
