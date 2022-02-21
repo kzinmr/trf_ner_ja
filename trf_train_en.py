@@ -221,6 +221,8 @@ class QuasiCoNLL2003TokenClassificationFeatures:
                 for i in range(len(label_ids)):
                     if label_ids[i] == target_id:
                         label_ids[i] = replace_id
+                    if label_ids[i] == -100:
+                        continue
                     else:
                         break
 
