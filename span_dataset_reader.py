@@ -85,7 +85,7 @@ class EnTrfTokenizer(TokenizerWithAlignment):
     def tokenize(self, text: str) -> List[str]:
         batch_enc = self.tokenizer(text)
         tokens = []
-        for w in batch_enc.words():
+        for w in batch_enc.word_ids():
             if w is not None:
                 span = batch_enc.word_to_chars(w)
                 tokens.append(text[span.start : span.end])
@@ -94,7 +94,7 @@ class EnTrfTokenizer(TokenizerWithAlignment):
     def tokenize_with_alignment(self, text: str) -> List[Token]:
         batch_enc = self.tokenizer(text)
         tokens = []
-        for w in batch_enc.words():
+        for w in batch_enc.word_ids():
             if w is not None:
                 span = batch_enc.word_to_chars(w)
                 tokens.append(Token(text[span.start : span.end], span.start, span.end))
