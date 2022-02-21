@@ -29,5 +29,5 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY predictor_en.py /app/predictor_en.py
-COPY trf_main_en.py /app/trf_train_en.py
+COPY trf_train_en.py /app/trf_train_en.py
 CMD ["python3", "/app/trf_train_en.py"]
