@@ -124,35 +124,30 @@ class Span2TokenConverter:
                 return superspan
         return None
 
-    @classmethod
-    def _get_token2label_map(
-        cls, spans_of_tokens: List[Tuple[int, int]], spans_of_chunks: List[ChunkSpan]
-    ) -> Dict[Tuple[int, int], str]:
-        """トークンの文字列スパンから、トークンを包摂するチャンクのラベルへのマップを構成."""
-        span_tuples = [(span.start, span.end) for span in spans_of_chunks]
-        _span2label = {(span.start, span.end): span.label for span in spans_of_chunks}
-        tokenspan2tagtype: Dict[Tuple[int, int], str] = {}
-        for original_token_span in spans_of_tokens:
-            chunk_span = cls._get_chunk_span(original_token_span, span_tuples)
-            if chunk_span is not None:
-                tokenspan2tagtype[original_token_span] = _span2label[chunk_span]
-        return tokenspan2tagtype
-
     @staticmethod
     def _get_labels_per_tokens(
         spans_of_tokens: List[Tuple[int, int]],
-        tokenspan2tagtype: Dict[Tuple[int, int], str],
+        tokenspan2chunkspan: Dict[Tuple[int, int], Tuple[int, int]],
+        chunkspan2tagtype: Dict[Tuple[int, int], str],
     ) -> List[str]:
         """トークン列に対応するラベル列をトークンスパンからラベルへのマップを基に構成"""
         label = "O"
         token_labels: List[str] = []
+        prev_span = (0,0)
         for token_span in spans_of_tokens:
-            if token_span in tokenspan2tagtype:
-                tagtype = tokenspan2tagtype[token_span]
+            if token_span in tokenspan2chunkspan:
+                chunkspan = tokenspan2chunkspan[token_span]
+                tagtype = chunkspan2tagtype[chunkspan]
                 if label == "O":
                     label = f"B-{tagtype}"
+                elif label.startswith("I"):
+                    if prev_span == chunkspan:
+                        label = f"I-{tagtype}"
+                    else:  # 同じtagtypeのチャンクが隣接
+                        label = f"B-{tagtype}"
                 else:
                     label = f"I-{tagtype}"
+                prev_span = chunkspan
             else:
                 label = "O"
 
@@ -165,8 +160,16 @@ class Span2TokenConverter:
     ) -> List[TokenLabelPair]:
         """文字列スパンとトークンスパンから、トークン-ラベルペアを得る."""
         spans_of_tokens = [(token.start, token.end) for token in tokens]
-        tokenspan2label = cls._get_token2label_map(spans_of_tokens, spans_of_chunks)
-        labels_per_tokens = cls._get_labels_per_tokens(spans_of_tokens, tokenspan2label)
+        # トークンの文字列スパンからトークンを包摂するチャンクへのマップを構成.
+        _span_tuples = [(span.start, span.end) for span in spans_of_chunks]
+        _span2label = {(span.start, span.end): span.label for span in spans_of_chunks}
+        tokenspan2chunkspan: Dict[Tuple[int, int], Tuple[int, int]] = {}
+        for original_token_span in spans_of_tokens:
+            chunk_span = cls._get_chunk_span(original_token_span, _span_tuples)
+            if chunk_span is not None:
+                tokenspan2chunkspan[original_token_span] = chunk_span
+        # トークン列に対応するラベル列を、トークンスパンをキーとするマップを基に構成.
+        labels_per_tokens = cls._get_labels_per_tokens(spans_of_tokens, tokenspan2chunkspan, _span2label)
         token_labels = [
             TokenLabelPair(token.text, label)
             for token, label in zip(tokens, labels_per_tokens)
