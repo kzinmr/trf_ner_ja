@@ -19,10 +19,6 @@ from transformers import (
     PreTrainedTokenizer,
 )
 
-
-# from predictor_en import Decoder, Predictor, Token, TokenLabelPair
-
-
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -93,6 +89,8 @@ def pairwise(iterable):
 
 
 class MeCabPreTokenizer:
+    """cl-tohoku/bert-japanese-v2設定に合わせたPreTokenizer"""
+
     def __init__(self):
         # mecab_option = "-Owakati"
         # self.wakati = MeCab.Tagger(mecab_option)
