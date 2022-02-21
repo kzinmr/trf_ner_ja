@@ -79,7 +79,7 @@ class MeCabTokenizer(TokenizerWithAlignment):
 
 class EnTrfTokenizer(TokenizerWithAlignment):
     def __init__(self, checkpoint: str):
-        self.tokenizer = AutoTokenizer.from_pretrained("")
+        self.tokenizer = AutoTokenizer.from_pretrained(checkpoint)
         assert self.tokenizer.is_fast
 
     def tokenize(self, text: str) -> List[str]:
