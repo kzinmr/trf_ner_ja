@@ -215,8 +215,8 @@ class QuasiCoNLL2003TokenClassificationFeatures:
                 previous_word_idx = word_idx
                 previous_label = self.id2label[tag] if tag != -100 else None
             # 窓境界のI-xxx開始をOに倒す
-            target_id = label_ids[0]
-            if label_ids and target_id != -100 and self.id2label[target_id].startswith("I"):
+            if label_ids and self.id2label[label_ids[1]].startswith("I"):
+                target_id = label_ids[1]
                 replace_id = self.label2id["O"]
                 for i in range(len(label_ids)):
                     if label_ids[i] == target_id:
