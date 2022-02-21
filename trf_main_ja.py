@@ -1,4 +1,5 @@
 import os
+import pickle
 import random
 from typing import Dict, List, Union
 
@@ -17,7 +18,6 @@ from transformers import (
     TrainingArguments,
 )
 
-from predictor_ja import TrfNERSlow
 from span_dataset_reader import DatasetPath, QuasiDataset
 
 MAX_LENGTH = 128
@@ -255,6 +255,16 @@ def predict(trainer, test_dataset):
     return input_tokens, true_predictions, true_labels
 
 
+def pickle_bert_model(model_dir: str, model_out_path: str):
+    model = AutoModelForTokenClassification.from_pretrained(model_dir)
+    tokenizer = AutoTokenizer.from_pretrained(model_dir)
+    # NOTE: cl-tohoku BERTはFast Tokenizerの読み込みができない(できても挙動が変になる)
+    assert not tokenizer.is_fast
+    model_dict = {"tokenizer": tokenizer, "model": model}
+    with open(model_out_path, "wb") as fp:
+        pickle.dump(model_dict, fp)
+
+
 if __name__ == "__main__":
 
     data_dir = "/app/workspace/"
@@ -267,10 +277,10 @@ if __name__ == "__main__":
         train = os.path.join(data_dir, "train.jsonl")
         valid = os.path.join(data_dir, "valid.jsonl")
         test = os.path.join(data_dir, "test.jsonl")
-        pathinfo = DatasetPath(train=train, validation=valid, test=test)
+        pathinfo = DatasetPath(model_checkpoint, train=train, validation=valid, test=test)
     else:
         filename = os.path.join(data_dir, "dataset.jsonl")
-        pathinfo = DatasetPath(whole=filename, validation_ratio=0.2, test_ratio=0.2)
+        pathinfo = DatasetPath(model_checkpoint, whole=filename, validation_ratio=0.2, test_ratio=0.2)
 
     dataset = QuasiDataset.load_from_span_dataset(pathinfo)
 
@@ -337,7 +347,7 @@ if __name__ == "__main__":
     trainer.evaluate()
 
     trainer.save_model(data_dir)
-    TrfNERSlow.pickle_bert_model(data_dir, os.path.join(data_dir, "predictor_ja.pkl"))
+    pickle_bert_model(data_dir, os.path.join(data_dir, "predictor_ja.pkl"))
 
     # prediction
     input_tokens, true_predictions, true_labels = predict(trainer, test_dataset)
