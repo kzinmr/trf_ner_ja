@@ -201,20 +201,16 @@ class QuasiCoNLL2003TokenClassificationFeatures:
                 elif word_idx != previous_word_idx:
                     tag = tags[word_idx]
                 # For the other tokens in a word, we set the label to either the current label or -100,
+                elif label_all_tokens:
+                    tag = tags[word_idx]
+                    # チャンク先頭の単語がsubtokenで B-xxx開始ならI-xxxを続ける
+                    if (
+                        previous_label and len(previous_label.split("-")) > 1
+                    ):
+                        label = "I-" + previous_label.split("-")[1]
+                        tag = self.label2id[label]
                 else:
-                    if label_all_tokens:
-                        tag = tags[word_idx]
-                        current = self.id2label[tag]
-                        # チャンク先頭の単語がsubtokenで B-xxx開始ならI-xxxを続ける
-                        if (
-                            current.startswith("B")
-                            and previous_label
-                            and previous_label.startswith("B")
-                        ):
-                            label = "I-" + previous_label.split("-")[1]
-                            tag = self.label2id[label]
-                    else:
-                        tag = -100
+                    tag = -100
                 label_ids.append(tag)
                 previous_word_idx = word_idx
                 previous_label = self.id2label[tag] if tag != -100 else None
@@ -294,9 +290,9 @@ if __name__ == "__main__":
     label_list = features.label_list
 
     # debug
-    # import pickle
-    # with open(os.path.join(data_dir, "dataset.pkl"), "wb") as fp:
-    #     pickle.dump(features.train_datasets, fp)
+    import pickle
+    with open(os.path.join(data_dir, "dataset.pkl"), "wb") as fp:
+        pickle.dump(features.train_datasets, fp)
 
     # Build Trainer:
     # - DataLoaderのラッパー (batcher, sampler, collator)
