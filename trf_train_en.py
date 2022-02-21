@@ -204,9 +204,7 @@ class QuasiCoNLL2003TokenClassificationFeatures:
                 elif label_all_tokens:
                     tag = tags[word_idx]
                     # チャンク先頭の単語がsubtokenで B-xxx開始ならI-xxxを続ける
-                    if (
-                        previous_label and len(previous_label.split("-")) > 1
-                    ):
+                    if previous_label and len(previous_label.split("-")) > 1:
                         label = "I-" + previous_label.split("-")[1]
                         tag = self.label2id[label]
                 else:
@@ -283,10 +281,14 @@ if __name__ == "__main__":
         train = os.path.join(data_dir, "train.jsonl")
         valid = os.path.join(data_dir, "valid.jsonl")
         test = os.path.join(data_dir, "test.jsonl")
-        pathinfo = DatasetPath(model_checkpoint, train=train, validation=valid, test=test)
+        pathinfo = DatasetPath(
+            model_checkpoint, train=train, validation=valid, test=test
+        )
     else:
         filename = os.path.join(data_dir, "dataset.jsonl")
-        pathinfo = DatasetPath(model_checkpoint, whole=filename, validation_ratio=0.2, test_ratio=0.2)
+        pathinfo = DatasetPath(
+            model_checkpoint, whole=filename, validation_ratio=0.2, test_ratio=0.2
+        )
 
     dataset = QuasiDataset.load_from_span_dataset(pathinfo)
 
@@ -302,6 +304,7 @@ if __name__ == "__main__":
 
     # debug
     import pickle
+
     with open(os.path.join(data_dir, "dataset.pkl"), "wb") as fp:
         pickle.dump(features.train_datasets, fp)
 

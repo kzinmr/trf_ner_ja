@@ -201,23 +201,28 @@ class QuasiCoNLL2003TokenClassificationFeatures:
                 elif word_idx != previous_word_idx:
                     tag = tags[word_idx]
                 # For the other tokens in a word, we set the label to either the current label or -100,
+                elif label_all_tokens:
+                    tag = tags[word_idx]
+                    # チャンク先頭の単語がsubtokenで B-xxx開始ならI-xxxを続ける
+                    if previous_label and len(previous_label.split("-")) > 1:
+                        label = "I-" + previous_label.split("-")[1]
+                        tag = self.label2id[label]
                 else:
-                    if label_all_tokens:
-                        tag = tags[word_idx]
-                        current = self.id2label[tag]
-                        # チャンク先頭の単語がsubtokenで B-xxx開始ならI-xxxを続ける
-                        if (
-                            current.startswith("B")
-                            and previous_label
-                            and previous_label.startswith("B")
-                        ):
-                            label = "I-" + previous_label.split("-")[1]
-                            tag = self.label2id[label]
-                    else:
-                        tag = -100
+                    tag = -100
                 label_ids.append(tag)
                 previous_word_idx = word_idx
                 previous_label = self.id2label[tag] if tag != -100 else None
+            # 窓境界のI-xxx開始をOに倒す
+            if label_ids and self.id2label[label_ids[1]].startswith("I"):
+                target_id = label_ids[1]
+                replace_id = self.label2id["O"]
+                for i in range(len(label_ids)):
+                    if label_ids[i] == target_id:
+                        label_ids[i] = replace_id
+                    elif label_ids[i] == -100:
+                        continue
+                    else:
+                        break
 
             label_ids_list.append(label_ids)
 
@@ -277,10 +282,14 @@ if __name__ == "__main__":
         train = os.path.join(data_dir, "train.jsonl")
         valid = os.path.join(data_dir, "valid.jsonl")
         test = os.path.join(data_dir, "test.jsonl")
-        pathinfo = DatasetPath(model_checkpoint, train=train, validation=valid, test=test)
+        pathinfo = DatasetPath(
+            model_checkpoint, train=train, validation=valid, test=test
+        )
     else:
         filename = os.path.join(data_dir, "dataset.jsonl")
-        pathinfo = DatasetPath(model_checkpoint, whole=filename, validation_ratio=0.2, test_ratio=0.2)
+        pathinfo = DatasetPath(
+            model_checkpoint, whole=filename, validation_ratio=0.2, test_ratio=0.2
+        )
 
     dataset = QuasiDataset.load_from_span_dataset(pathinfo)
 
