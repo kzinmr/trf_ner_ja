@@ -82,6 +82,12 @@ class EnTrfTokenizer(TokenizerWithAlignment):
         self.tokenizer = AutoTokenizer.from_pretrained(checkpoint)
         assert self.tokenizer.is_fast
 
+    @staticmethod
+    def ordered_uniq(seq):
+        seen = set()
+        seen_add = seen.add
+        return [x for x in seq if x not in seen and not seen_add(x)]
+
     def tokenize(self, text: str) -> List[str]:
         batch_enc = self.tokenizer(text)
         tokens = []
@@ -94,7 +100,7 @@ class EnTrfTokenizer(TokenizerWithAlignment):
     def tokenize_with_alignment(self, text: str) -> List[Token]:
         batch_enc = self.tokenizer(text)
         tokens = []
-        for w in batch_enc.word_ids():
+        for w in self.ordered_uniq(batch_enc.word_ids()):  # subword文はまとめる
             if w is not None:
                 span = batch_enc.word_to_chars(w)
                 tokens.append(Token(text[span.start : span.end], span.start, span.end))
