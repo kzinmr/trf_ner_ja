@@ -16,7 +16,6 @@ from transformers import (
     PreTrainedTokenizerFast,
 )
 
-
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -153,7 +152,7 @@ class FastDecoder:
         tokens_in_windows: List[List[TokenLabelPair]],
         labels_list: List[List[str]],
     ) -> List[List[TokenLabelPair]]:
-        """ トークン-ラベルペアリストに対して、ラベル属性に予測結果ラベルを書き込む処理 """
+        """トークン-ラベルペアリストに対して、ラベル属性に予測結果ラベルを書き込む処理"""
         return [
             [
                 TokenLabelPair.build(token_label.text, token_label.start_pos, label)
@@ -165,7 +164,7 @@ class FastDecoder:
     def unwindow(
         self, tokens_in_windows: List[List[TokenLabelPair]]
     ) -> List[TokenLabelPair]:
-        """ window毎の予測結果を、連続した一文内の予測結果に変換する. """
+        """window毎の予測結果を、連続した一文内の予測結果に変換する."""
         window_stride = self.window_stride
 
         def _merge_label_pair(left: str, right: str) -> str:
@@ -259,7 +258,7 @@ class Predictor:
         self.max_length = max_length
 
     def predict(self, dataset: List[dict]) -> List:
-        """ Dataset(Tensor) から Dataloader を構成し、数値予測を行う. """
+        """Dataset(Tensor) から Dataloader を構成し、数値予測を行う."""
 
         # 予測なのでシャッフルなしのサンプラーを使用
         sampler = SequentialSampler(dataset)

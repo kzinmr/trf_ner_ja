@@ -1,15 +1,15 @@
-from collections import defaultdict
 import gc
 import os
 import pickle
+from collections import defaultdict
 from dataclasses import dataclass
 from itertools import chain, tee
 from typing import Dict, List, Optional
 
 import fugashi
-import unidic_lite
 import tokenizations
 import torch
+import unidic_lite
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.sampler import SequentialSampler
 from transformers import (
@@ -255,7 +255,7 @@ class SlowDecoder:
     def unwindow(
         self, tokens_in_windows: List[List[TokenLabelPair]]
     ) -> List[TokenLabelPair]:
-        """ window毎の予測結果を、連続した一文内の予測結果に変換する. """
+        """window毎の予測結果を、連続した一文内の予測結果に変換する."""
         window_stride = self.window_stride
 
         def _merge_label_pair(left: str, right: str) -> str:
@@ -307,7 +307,7 @@ class SlowDecoder:
         tokens_in_windows: List[List[TokenLabelPair]],
         labels_list: List[List[str]],
     ) -> List[List[TokenLabelPair]]:
-        """ トークン-ラベルペアリストに対して、ラベル属性に予測結果ラベルを書き込む処理 """
+        """トークン-ラベルペアリストに対して、ラベル属性に予測結果ラベルを書き込む処理"""
 
         def _bio_sorter(x: str):
             if x.startswith("O"):
@@ -403,7 +403,7 @@ class Predictor:
         self.max_length = max_length
 
     def predict(self, dataset: List[dict]) -> List:
-        """ Dataset(Tensor) から Dataloader を構成し、数値予測を行う. """
+        """Dataset(Tensor) から Dataloader を構成し、数値予測を行う."""
 
         # 予測なのでシャッフルなしのサンプラーを使用
         sampler = SequentialSampler(dataset)
