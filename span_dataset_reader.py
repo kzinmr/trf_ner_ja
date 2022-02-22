@@ -133,7 +133,7 @@ class Span2TokenConverter:
         """トークン列に対応するラベル列をトークンスパンからラベルへのマップを基に構成"""
         label = "O"
         token_labels: List[str] = []
-        prev_span = (0,0)
+        prev_span = (0, 0)
         for token_span in spans_of_tokens:
             if token_span in tokenspan2chunkspan:
                 chunkspan = tokenspan2chunkspan[token_span]
@@ -169,7 +169,9 @@ class Span2TokenConverter:
             if chunk_span is not None:
                 tokenspan2chunkspan[original_token_span] = chunk_span
         # トークン列に対応するラベル列を、トークンスパンをキーとするマップを基に構成.
-        labels_per_tokens = cls._get_labels_per_tokens(spans_of_tokens, tokenspan2chunkspan, _span2label)
+        labels_per_tokens = cls._get_labels_per_tokens(
+            spans_of_tokens, tokenspan2chunkspan, _span2label
+        )
         token_labels = [
             TokenLabelPair(token.text, label)
             for token, label in zip(tokens, labels_per_tokens)
