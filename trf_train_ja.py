@@ -18,7 +18,7 @@ from transformers import (
     TrainingArguments,
 )
 
-from span_dataset_reader import DatasetPath, QuasiDataset
+from span_dataset_reader import CoNLLSentence, DatasetPath, QuasiDataset
 
 MAX_LENGTH = 128
 
@@ -272,24 +272,53 @@ def pickle_bert_model(model_dir: str, model_out_path: str):
 
 if __name__ == "__main__":
     seed_everything(1)
-
     data_dir = "/app/workspace/"
+    trainjsl = os.path.join(data_dir, "train.jsonl")
+    validjsl = os.path.join(data_dir, "valid.jsonl")
+    testjsl = os.path.join(data_dir, "test.jsonl")
+
+    read_conll = True
+    if read_conll:
+        print("read conll2003-like format")
+        traincnl = os.path.join(data_dir, "train.conll")
+        validcnl = os.path.join(data_dir, "valid.conll")
+        testcnl = os.path.join(data_dir, "test.conll")
+        train = CoNLLSentence.from_conll(traincnl)
+        valid = CoNLLSentence.from_conll(validcnl)
+        test = CoNLLSentence.from_conll(testcnl)
+        print(len(train), len(valid), len(test))
+        with open(trainjsl, "wt") as fp:
+            for s in train:
+                fp.write(s.export_json())
+                fp.write("\n")
+        with open(validjsl, "wt") as fp:
+            for s in valid:
+                fp.write(s.export_json())
+                fp.write("\n")
+        with open(testjsl, "wt") as fp:
+            for s in test:
+                fp.write(s.export_json())
+                fp.write("\n")
+
     is_splitted = True
 
     model_checkpoint = "cl-tohoku/bert-base-japanese-v2"
     tokenizer = AutoTokenizer.from_pretrained(model_checkpoint)
 
     if is_splitted:
-        train = os.path.join(data_dir, "train.jsonl")
-        valid = os.path.join(data_dir, "valid.jsonl")
-        test = os.path.join(data_dir, "test.jsonl")
         pathinfo = DatasetPath(
-            model_checkpoint, train=train, validation=valid, test=test
+            model_checkpoint,
+            train=trainjsl,
+            validation=validjsl,
+            test=testjsl,
         )
     else:
         filename = os.path.join(data_dir, "dataset.jsonl")
         pathinfo = DatasetPath(
-            model_checkpoint, whole=filename, validation_ratio=0.2, test_ratio=0.2
+            model_checkpoint,
+            whole=filename,
+            validation_ratio=0.2,
+            test_ratio=0.2,
         )
 
     dataset = QuasiDataset.load_from_span_dataset(pathinfo)

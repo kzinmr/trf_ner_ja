@@ -2,12 +2,11 @@ import json
 import os
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, Iterable, List, Optional, Tuple, Union
 
 import fugashi
 import unidic_lite
 from sklearn.model_selection import train_test_split
-from transformers import AutoTokenizer
 
 
 @dataclass
@@ -74,36 +73,6 @@ class MeCabTokenizer(TokenizerWithAlignment):
             tokens.append(Token(token, start, end))
             _cursor = end
 
-        return tokens
-
-
-class EnTrfTokenizer(TokenizerWithAlignment):
-    def __init__(self, checkpoint: str):
-        self.tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-        assert self.tokenizer.is_fast
-
-    @staticmethod
-    def ordered_uniq(seq):
-        seen = set()
-        seen_add = seen.add
-        return [x for x in seq if x not in seen and not seen_add(x)]
-
-    def tokenize(self, text: str) -> List[str]:
-        batch_enc = self.tokenizer(text)
-        tokens = []
-        for w in batch_enc.word_ids():
-            if w is not None:
-                span = batch_enc.word_to_chars(w)
-                tokens.append(text[span.start : span.end])
-        return tokens
-
-    def tokenize_with_alignment(self, text: str) -> List[Token]:
-        batch_enc = self.tokenizer(text)
-        tokens = []
-        for w in self.ordered_uniq(batch_enc.word_ids()):  # subword文はまとめる
-            if w is not None:
-                span = batch_enc.word_to_chars(w)
-                tokens.append(Token(text[span.start : span.end], span.start, span.end))
         return tokens
 
 
@@ -227,14 +196,14 @@ class Span2TokenConverter:
             for data in lines:
                 text = data["text"]
                 spans = data.get("spans", None)
-                if spans:
-                    spans = [
-                        ChunkSpan(sp["start"], sp["end"], sp["label"]) for sp in spans
-                    ]
-                    token_labels = self.get_token_label_pairs(text, spans)
-                    # window処理をかけて MemoryError を防止
-                    token_labels_windows = self.window_token_labels(token_labels)
-                    dataset.extend(token_labels_windows)
+                # if spans:  # アノテーションあるデータのみ生成する場合コメントアウト
+                spans = [
+                    ChunkSpan(sp["start"], sp["end"], sp["label"]) for sp in spans
+                ]
+                token_labels = self.get_token_label_pairs(text, spans)
+                # window処理をかけて MemoryError を防止
+                token_labels_windows = self.window_token_labels(token_labels)
+                dataset.extend(token_labels_windows)
         return dataset
 
     @staticmethod
@@ -431,13 +400,149 @@ class QuasiDataset:
 
         sentences = _stringfy_sentences(self.train)
         with open("train.conll", "wt") as fp:
-            _data = "\n".join(sentences)
+            _data = "\n\n".join(sentences)
             fp.write(_data)
         sentences = _stringfy_sentences(self.validation)
-        with open("validation.conll", "wt") as fp:
-            _data = "\n".join(sentences)
+        with open("valid.conll", "wt") as fp:
+            _data = "\n\n".join(sentences)
             fp.write(_data)
         sentences = _stringfy_sentences(self.test)
         with open("test.conll", "wt") as fp:
-            _data = "\n".join(sentences)
+            _data = "\n\n".join(sentences)
             fp.write(_data)
+
+@dataclass
+class CoNLLSentence(Iterable[TokenLabelPair]):
+    """CoNLL2003風形式のトークン-ラベルデータを読み込むクラス。
+    span形式のjsonにエクスポートすることを想定している。
+    """
+    token_labels: List[TokenLabelPair]
+    chunks: List[ChunkSpan]
+
+    @property
+    def text(self) -> str:
+        return "".join([tl.token for tl in self.token_labels])
+
+    def __iter__(self):
+        for token in self.token_labels:
+            yield token
+
+    @staticmethod
+    def __chunk_token_labels(
+        tokens: List[TokenLabelPair],
+    ) -> List[List[TokenLabelPair]]:
+        chunks = []
+        chunk = []
+        for token in tokens:
+            if token.label.startswith("B"):
+                if chunk:
+                    chunks.append(chunk)
+                    chunk = []
+                chunk = [token]
+            elif token.label.startswith("I"):
+                chunk.append(token)
+            elif chunk:
+                chunks.append(chunk)
+                chunk = []
+        return chunks
+
+    @staticmethod
+    def __chunk_span(tokens: List[TokenLabelPair]) -> List[Tuple[int, int]]:
+        pos = 0
+        spans = []
+        chunk_spans = []
+        for tl in tokens:
+
+            token_len = len(tl.token)
+            span = (pos, pos + token_len)
+            pos += token_len
+
+            if tl.label.startswith("B"):
+                # I->B
+                if len(spans) > 0:
+                    chunk_spans.append((spans[0][0], spans[-1][1]))
+                    spans = []
+                spans.append(span)
+            elif tl.label.startswith("I"):
+                spans.append(span)
+            elif len(spans) > 0:
+                # B|I -> O
+                chunk_spans.append((spans[0][0], spans[-1][1]))
+                spans = []
+
+        return chunk_spans
+
+    @classmethod
+    def __build_chunks(cls, tokens: List[TokenLabelPair]) -> List[ChunkSpan]:
+        _chunks = cls.__chunk_token_labels(tokens)
+        _labels = [c_tokens[0].label for c_tokens in _chunks]
+        _spans = cls.__chunk_span(tokens)
+        return [
+            ChunkSpan(
+                start=s,
+                end=e,
+                label=lbl.split("-")[1],
+            )
+            for lbl, (s, e) in zip(_labels, _spans)
+        ]
+
+    @classmethod
+    def from_conll(cls, path: str, delimiter: str = "\t"):
+        # CoNLL2003 -> List[Sentence]
+        sentences = []
+        with open(path) as fp:
+            for s in fp.read().split("\n\n"):
+                tokens: List[TokenLabelPair] = []
+                for token in s.split("\n"):
+                    line = token.split(delimiter)
+                    if len(line) >= 2:
+                        token_text = line[0]
+                        token_label = line[-1]
+                        tlp = TokenLabelPair(token_text, token_label)
+                        tokens.append(tlp)
+                chunks = cls.__build_chunks(tokens)
+                sentences.append(CoNLLSentence(tokens, chunks))
+        return sentences
+
+    def export_span_format(self) -> Dict:
+        # {"text": "", "spans": [{"start":0, "end":1, "label": "PERSON"}]}
+        text = self.text
+        spans = [
+            {"start": c.start, "end": c.end, "label": c.label} for c in self.chunks
+        ]
+        return {"text": text, "spans": spans}
+
+    def export_json(self) -> str:
+        jd = self.export_span_format()
+        return json.dumps(jd, ensure_ascii=False)
+
+
+if __name__ == "__main__":
+    read_conll = True
+    if read_conll:
+        # read conll2003-like format
+        train = CoNLLSentence.from_conll("train.conll")
+        valid = CoNLLSentence.from_conll("valid.conll")
+        test = CoNLLSentence.from_conll("test.conll")
+        with open("train.jsonl", "wt") as fp:
+            for s in train:
+                fp.write(s.export_json())
+                fp.write("\n")
+        with open("valid.jsonl", "wt") as fp:
+            for s in valid:
+                fp.write(s.export_json())
+                fp.write("\n")
+        with open("test.jsonl", "wt") as fp:
+            for s in test:
+                fp.write(s.export_json())
+                fp.write("\n")
+    # read span format dataset
+    tokenizer = MeCabTokenizer()
+    converter = Span2TokenConverter(tokenizer)
+    dataset = QuasiDataset.load_from_span_dataset_split(
+        converter,
+        'train.jsonl',
+        'valid.jsonl',
+        'test.jsonl'
+    )
+    dataset.export_token_label_dataset()
