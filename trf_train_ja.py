@@ -271,6 +271,7 @@ def pickle_bert_model(model_dir: str, model_out_path: str):
 
 
 if __name__ == "__main__":
+    seed_everything(1)
 
     data_dir = "/app/workspace/"
     is_splitted = True
