@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:1.6.0-cuda10.1-cudnn7-runtime
+FROM pytorch/pytorch:1.10.0-cuda11.3-cudnn8-runtime
 
 WORKDIR /app
 
@@ -37,17 +37,8 @@ RUN pip3 install -U pip
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
-#     pip install hydra-core --upgrade
 
-
-COPY run.sh /app/run.sh
-# COPY config.yaml .
-COPY data.py /app/data.py
-COPY tokenizer.py /app/tokenizer.py
-COPY pl_main.py /app/pl_main.py
-COPY pl_module_trf.py /app/pl_module_trf.py
-COPY datamodule.py /app/datamodule.py
-# CMD ["bash", "/app/run.sh"]
-
-COPY trf_main.py /app/trf_main.py
-CMD ["python3", "/app/trf_main.py"]
+COPY span_dataset_reader.py /app/span_dataset_reader.py
+COPY predictor_ja.py /app/predictor_ja.py
+COPY trf_train_ja.py /app/trf_train_ja.py
+CMD ["python3", "/app/trf_train_ja.py"]
