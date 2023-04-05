@@ -3,8 +3,8 @@ import os
 import pickle
 from dataclasses import dataclass
 from itertools import chain, tee
-from typing import Dict, List, Optional
 
+import regex as re
 import torch
 from torch.utils.data.dataloader import DataLoader
 from torch.utils.data.sampler import SequentialSampler
@@ -19,34 +19,27 @@ from transformers import (
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-def pairwise(iterable):
-    # pairwise('ABCDEFG') --> AB BC CD DE EF FG
-    a, b = tee(iterable)
-    next(b, None)
-    return zip(a, b)
-
-
 @dataclass
 class Token:
     text: str
     start: int
-    end: Optional[int] = None
+    end: int | None = None
 
 
 @dataclass
 class TokenLabelPair:
     token: Token
     label: str
-    word_text: Optional[str] = None
-    word_start_pos: Optional[int] = None
+    word_text: str | None = None
+    word_start_pos: int | None = None
 
     @staticmethod
     def build(
         text: str,
         start_pos: int,
         label: str,
-        word_text: Optional[str] = None,
-        word_start_pos: Optional[int] = None,
+        word_text: str | None = None,
+        word_start_pos: int | None = None,
     ):
         # NOTE: tokenによってはend位置計算ができないことがある
         end_pos = None
@@ -65,7 +58,7 @@ class TokenLabelPair:
         return self.token.start
 
     @property
-    def end_pos(self) -> Optional[int]:
+    def end_pos(self) -> int | None:
         # NOTE: tokenによってはend位置が信頼できないおそれがある
         if (
             self.token.text != "[UNK]"
@@ -77,11 +70,69 @@ class TokenLabelPair:
             return None
 
     @property
-    def word_end_pos(self) -> Optional[int]:
+    def word_end_pos(self) -> int | None:
         if self.word_start_pos and self.word_text:
             return self.word_start_pos + len(self.word_text)
         else:
             return None
+
+
+def pairwise(iterable):
+    # pairwise('ABCDEFG') --> AB BC CD DE EF FG
+    a, b = tee(iterable)
+    next(b, None)
+    return zip(a, b)
+
+
+@staticmethod
+def unwindow(
+    token_label_pairs_in_windows: list[list[TokenLabelPair]], window_stride
+) -> list[TokenLabelPair]:
+    """window毎の予測結果(Token-Labelペア)を、連続した一文内の予測結果に変換する."""
+
+    def _merge_label_pair(left: str, right: str) -> str:
+        """I>B>Oの順序関係の下でペアのmaxをとる"""
+        left_bio = left.split("-")[0]
+        right_bio = right.split("-")[0]
+        if left == right:
+            return left
+        elif left_bio == "I" or right_bio == "I":
+            return left if left_bio == "I" else right
+        elif left_bio == "B" or right_bio == "B":
+            return left if left_bio == "B" else right
+        else:
+            return "O"
+
+    if len(token_label_pairs_in_windows) == 1:
+        return token_label_pairs_in_windows[0]
+    elif len(token_label_pairs_in_windows) > 1:
+        # windowが複数ある場合、strideぶん被っているwindow境界のラベルをマージする
+        start_pos2token_label: dict[int, TokenLabelPair] = {}
+        for prev_w, next_w in pairwise(token_label_pairs_in_windows):
+            for token_label in prev_w:
+                if token_label.token.start not in start_pos2token_label:
+                    start_pos2token_label[token_label.token.start] = token_label
+
+            for prev_token_label, next_token_label in zip(
+                prev_w[-window_stride:], next_w[:window_stride]
+            ):
+                start_pos = prev_token_label.token.start
+                merged_label = _merge_label_pair(
+                    prev_token_label.label, next_token_label.label
+                )
+                start_pos2token_label[start_pos] = TokenLabelPair.build(
+                    prev_token_label.token.text, start_pos, merged_label
+                )
+        for token_label in token_label_pairs_in_windows[-1]:
+            if token_label.token.start not in start_pos2token_label:
+                start_pos2token_label[token_label.token.start] = token_label
+
+        token_label_pairs = [
+            v for _, v in sorted(start_pos2token_label.items(), key=lambda x: x[0])
+        ]
+        return token_label_pairs
+    else:
+        return []
 
 
 class FastEncoder:
@@ -96,12 +147,12 @@ class FastEncoder:
 
     def encode(self, sentence_text: str):
         """FastTokenizerによりテキストをトークナイズ・Tensor化する。"""
-        assert self.window_stride < self.max_length - 2
+        assert self.window_stride < self.max_length - 2  # [CLS]と[SEP]を考慮
         # NOTE: デコーディングのために、元文字列を解析しつつoffset_mappingを保持.
         # NOTE: 長文のメモリ溢れ対策として、ストライド付きウィンドウ分割を行う.
         enc: BatchEncoding = self.tokenizer(
             sentence_text,
-            padding=True,
+            padding="max_length",
             truncation=True,
             max_length=self.max_length,
             stride=self.window_stride,  # fast-only
@@ -140,18 +191,18 @@ class FastEncoder:
 
 
 class FastDecoder:
-    id2label: Dict[int, str]
+    id2label: dict[int, str]
     window_stride: int
 
-    def __init__(self, id2label: Dict[int, str], window_stride: int):
+    def __init__(self, id2label: dict[int, str], window_stride: int):
         self.id2label = id2label
         self.window_stride = window_stride
 
     def update_labels(
         self,
-        tokens_in_windows: List[List[TokenLabelPair]],
-        labels_list: List[List[str]],
-    ) -> List[List[TokenLabelPair]]:
+        tokens_in_windows: list[list[TokenLabelPair]],
+        labels_list: list[list[str]],
+    ) -> list[list[TokenLabelPair]]:
         """トークン-ラベルペアリストに対して、ラベル属性に予測結果ラベルを書き込む処理"""
         return [
             [
@@ -161,63 +212,11 @@ class FastDecoder:
             for token_labels, labels in zip(tokens_in_windows, labels_list)
         ]
 
-    def unwindow(
-        self, tokens_in_windows: List[List[TokenLabelPair]]
-    ) -> List[TokenLabelPair]:
-        """window毎の予測結果を、連続した一文内の予測結果に変換する."""
-        window_stride = self.window_stride
-
-        def _merge_label_pair(left: str, right: str) -> str:
-            """I>B>Oの順序関係の下でペアのmaxをとる"""
-            left_bio = left.split("-")[0]
-            right_bio = right.split("-")[0]
-            if left == right:
-                return left
-            elif left_bio == "I" or right_bio == "I":
-                return left if left_bio == "I" else right
-            elif left_bio == "B" or right_bio == "B":
-                return left if left_bio == "B" else right
-            else:
-                return "O"
-
-        tokens_in_sentence: List[TokenLabelPair] = []
-        if len(tokens_in_windows) == 1:
-            tokens_in_sentence = tokens_in_windows[0]
-        elif len(tokens_in_windows) > 1:
-            # windowが複数ある場合、strideぶん被っているwindow境界のラベルをマージする
-            startpos2token: Dict[int, TokenLabelPair] = {}
-            for prev_w, next_w in pairwise(tokens_in_windows):
-                #     print(prev_w[-window_stride:])
-                #     print(next_w[:window_stride])
-                for token_label in prev_w:
-                    if token_label.token.start not in startpos2token:
-                        startpos2token[token_label.token.start] = token_label
-
-                for prev_token_label, next_token_label in zip(
-                    prev_w[-window_stride:], next_w[:window_stride]
-                ):
-                    start_pos = prev_token_label.token.start
-                    merged_label = _merge_label_pair(
-                        prev_token_label.label, next_token_label.label
-                    )
-                    startpos2token[start_pos] = TokenLabelPair.build(
-                        prev_token_label.token.text, start_pos, merged_label
-                    )
-            for token_label in tokens_in_windows[-1]:
-                if token_label.token.start not in startpos2token:
-                    startpos2token[token_label.token.start] = token_label
-
-            tokens_in_sentence = [
-                v for _, v in sorted(startpos2token.items(), key=lambda x: x[0])
-            ]
-
-        return tokens_in_sentence
-
     def decode(
         self,
-        tokens_in_windows: List[List[TokenLabelPair]],
-        outputs: List,
-    ) -> List[TokenLabelPair]:
+        tokens_in_windows: list[list[TokenLabelPair]],
+        outputs: list,
+    ) -> list[TokenLabelPair]:
         # decode logits into label ids
         batch_label_ids = []
         for out in outputs:
@@ -233,9 +232,11 @@ class FastDecoder:
             for label_ids in chain.from_iterable(batch_label_ids)
         ]
         # update by predicted labels in each tokens
-        tokens_in_windows = self.update_labels(tokens_in_windows, labels_list)
-
-        tokens_in_sentence = self.unwindow(tokens_in_windows)
+        token_label_pairs_in_windows = self.update_labels(
+            tokens_in_windows, labels_list
+        )
+        # window -> sentence
+        tokens_in_sentence = unwindow(token_label_pairs_in_windows, self.window_stride)
         return tokens_in_sentence
 
 
@@ -257,7 +258,7 @@ class Predictor:
         self.batch_size = batch_size
         self.max_length = max_length
 
-    def predict(self, dataset: List[dict]) -> List:
+    def predict(self, dataset: list[dict]) -> list:
         """Dataset(Tensor) から Dataloader を構成し、数値予測を行う."""
 
         # 予測なのでシャッフルなしのサンプラーを使用
@@ -266,7 +267,7 @@ class Predictor:
         # - 各バッチサンプルに対して tokenizer.pad() が呼ばれ、torch.Tensorが返される
         # - バッチ内のラベルは削除される (See. DataCollatorForTokenClassification)
         data_collator = DataCollatorWithPadding(
-            self.tokenizer, padding=True, max_length=self.max_length
+            self.tokenizer, padding="max_length", max_length=self.max_length
         )
         dl = DataLoader(
             dataset,
@@ -297,7 +298,7 @@ class TrfNERFast:
         assert self.tokenizer.is_fast
         self.model = model_dict["model"]
         # for label decoding
-        id2label: Dict[int, str] = self.model.config.id2label
+        id2label: dict[int, str] = self.model.config.id2label
 
         # pipeline
         self.encoder = FastEncoder(self.tokenizer, max_length, window_stride)
@@ -316,11 +317,13 @@ class TrfNERFast:
     def predict(
         self,
         sentence_text: str,
-    ) -> List[TokenLabelPair]:
+    ) -> list[TokenLabelPair]:
         """長文のtokenize付きNER:
         - 長文でもstride付きwindowに区切り(tokenizer)、バッチで予測する(dataloader)
         - windowの境界については予測結果をマージする
         """
+        if not re.sub(r"\s+", "", sentence_text):  # 形態素解析結果が空だとエラーになる
+            return []
         dataset, tokens_in_windows = self.encoder.encode(sentence_text)
         outputs = self.predictor.predict(dataset)
         tokens_in_sentence = self.decoder.decode(tokens_in_windows, outputs)
@@ -328,9 +331,8 @@ class TrfNERFast:
 
 
 if __name__ == "__main__":
-
     data_dir = "/app/workspace/"
-    pkl_path = os.path.join(data_dir, "predictor_en.pkl")
+    pkl_path = os.path.join(data_dir, "predictor.pkl")
     predictor = TrfNERFast(pkl_path)
     tokens = [
         "The",

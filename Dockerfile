@@ -1,4 +1,4 @@
-FROM pytorch/pytorch:1.10.0-cuda11.3-cudnn8-runtime
+FROM pytorch/pytorch:1.13.1-cuda11.6-cudnn8-runtime
 
 WORKDIR /app
 
@@ -27,8 +27,6 @@ RUN pip3 install -U pip
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
+RUN rm requirements.txt
 
-COPY span_dataset_reader.py /app/span_dataset_reader.py
-COPY predictor_en.py /app/predictor_en.py
-COPY trf_train_en.py /app/trf_train_en.py
-CMD ["python3", "/app/trf_train_en.py"]
+COPY span2conll.py /app/span2conll.py
