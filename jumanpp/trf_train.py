@@ -240,9 +240,15 @@ converter = Span2WordLabelConverter(word_tokenizer, max_length, window_stride)
 train_pth = os.path.join(workdir, "train.jsonl")
 valid_pth = os.path.join(workdir, "valid.jsonl")
 test_pth = os.path.join(workdir, "test.jsonl")
-train_dataset = make_dataset(converter, train_pth, id2label, label2id, max_length)
-valid_dataset = make_dataset(converter, valid_pth, id2label, label2id, max_length)
-test_dataset = make_dataset(converter, test_pth, id2label, label2id, max_length)
+train_dataset = make_dataset(
+    converter, train_pth, tokenizer, id2label, label2id, max_length
+)
+valid_dataset = make_dataset(
+    converter, valid_pth, tokenizer, id2label, label2id, max_length
+)
+test_dataset = make_dataset(
+    converter, test_pth, tokenizer, id2label, label2id, max_length
+)
 
 
 # Build Trainer:
