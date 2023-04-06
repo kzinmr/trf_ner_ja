@@ -1,6 +1,5 @@
 transformers
 evaluate
-datasets
 tokenizers
 seqeval
 regex
