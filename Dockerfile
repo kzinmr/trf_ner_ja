@@ -29,4 +29,5 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 RUN rm requirements.txt
 
+COPY data.py /app/data.py
 COPY span2conll.py /app/span2conll.py
