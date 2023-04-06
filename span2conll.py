@@ -1,6 +1,5 @@
 import json
 from abc import ABCMeta, abstractmethod
-from dataclasses import dataclass
 
 from data import ChunkSpan, Token, TokenLabelPair
 
@@ -11,22 +10,37 @@ def bio_sorter(x: str):
     else:
         return "-".join(x.split("-")[::-1])
 
+
 def make_batch(
-    data: list[dict[str, int | list[str]]], batch_size: int
-) -> list[dict[str, list[int] | list[list[str]]]]:
+    data: list[dict[str, list]], batch_size: int
+) -> list[dict[str, list[list]]]:
     n_data = len(data)
-    batched_data = []
+    batched_data: list[dict[str, list[list]]] = []
     for i in range(0, n_data, batch_size):
         batch = data[i : i + batch_size]
         batched_data.append(
             {
                 "id": [d["id"] for d in batch],
-                "tokens": [d["tokens"] for d in batch],
+                "words": [d["words"] for d in batch],
                 "labels": [d["labels"] for d in batch],
-                "ner_tags": [d["ner_tags"] for d in batch],
             }
         )
     return batched_data
+
+
+def export_conll_format(
+    dataset: list[list[TokenLabelPair]], filepath: str, delimiter: str = "\t"
+):
+    """トークン-ラベルペアのデータをConll2003-likeな形式で出力する."""
+    sentences = []
+    for token_labels in dataset:
+        sentence = "\n".join(
+            delimiter.join((tok_lb.token, tok_lb.label)) for tok_lb in token_labels
+        )
+        sentences.append(sentence)
+    with open(filepath, "wt") as fp:
+        _data = "\n\n".join(sentences)
+        fp.write(_data)
 
 
 class WordTokenizerWithAlignment(metaclass=ABCMeta):
@@ -77,7 +91,7 @@ class Span2WordLabelConverter:
     @staticmethod
     def _get_chunk_span(
         query_span: tuple[int, int], superspans: list[tuple[int, int]]
-    ) -> tuple[int, int] | None:
+    ) -> tuple[int, int]:
         """トークンを包摂するチャンクについて、トークンの文字列スパンを包摂するチャンクのスパンを返す.
         NOTE: 一つのチャンクはトークン境界を跨がないと想定.
         """
@@ -156,9 +170,7 @@ class Span2WordLabelConverter:
         token_labels_windows = self.window_by_tokens(token_labels)
         return token_labels_windows
 
-    def convert(
-        self, filename_jsonl: str, export: bool = True
-    ) -> list[list[TokenLabelPair]]:
+    def convert(self, filename_jsonl: str, export: bool = True) -> list[dict[list]]:
         """文字列位置スパンで記録されたデータセットをトークナイズし、
         トークン-ラベルのペアからなるConll2003-likeな形式に変換する.
         メモリ溢れ防止のためのデータ分割処理もここで行う.
@@ -180,20 +192,23 @@ class Span2WordLabelConverter:
             for text, spans in text_spans
             for token_label in self._convert(text, spans)
         ]
+
         if export:
             outpath = filename_jsonl.replace(".jsonl", ".conll")
-            self.export_conll_format(dataset, outpath)
-        return dataset
+            export_conll_format(dataset, outpath)
 
-    @staticmethod
-    def export_conll_format(
-        dataset: list[list[TokenLabelPair]], filepath: str, delimiter: str = "\t"
-    ):
-        """トークン-ラベルペアのデータをConll2003-likeな形式で出力する."""
-        sentences = []
-        for token_labels in dataset:
-            sentence = "\n".join(delimiter.join((tok_lb.token, tok_lb.label)) for tok_lb in token_labels)
-            sentences.append(sentence)
-        with open(filepath, "wt") as fp:
-            _data = "\n\n".join(sentences)
-            fp.write(_data)
+        return [
+            {
+                "id": i,
+                "words": [t_l.token for t_l in token_labels],
+                "labels": [t_l.label for t_l in token_labels],
+            }
+            for i, token_labels in enumerate(dataset)
+        ]
+
+    def convert_as_batch(
+        self, filename_jsonl: str, batch_size: int, export: bool = True
+    ) -> list[dict[str, list[list]]]:
+        dataset = self.convert(filename_jsonl, export)
+        batched_dataset = make_batch(dataset, batch_size)
+        return batched_dataset

@@ -128,37 +128,17 @@ def _make_token_labels_from_word_token_map(
     return _label_ids_list
 
 
-def make_dataset(
-    span2wordlabel_converter: Span2WordLabelConverter,
-    path: str,
+def _process_batch(
+    batch: dict[str, list[list]],
     tokenizer,
     id2label: dict[int, str],
     label2id: dict[str, int],
     max_length=128,
     label_all_tokens=True,
-) -> list[dict]:
-    # 単語単位のラベルアラインメント (span形式 -> conll03-like形式)
-    # ※ sentencepieceベース手法の場合不要
-    _word_labels_windows = span2wordlabel_converter.convert(path)
-
-    # train = [
-    #     {
-    #         "id": i,
-    #         "tokens": [t_l.token for t_l in token_labels],
-    #         "labels": [t_l.label for t_l in token_labels],
-    #         "ner_tags": [label2id[t_l.label] for t_l in token_labels],
-    #     }
-    #     for i, token_labels in enumerate(token_labels_windows_train)
-    # ]
-
-    # train_batch=32
-    # make_batch(train, train_batch)
-
-    # 各単語内の、トークン単位のラベルアラインメント
+) -> list[dict[str, list]]:
     assert tokenizer.is_fast
-    word_batches = [
-        [t_l.token for t_l in word_labels] for word_labels in _word_labels_windows
-    ]
+    word_batches = batch["words"]
+    label_batches = [[label2id[l] for l in ls] for ls in batch["labels"]]
     # conll2003形式ではPreTokenize済みなため is_split_into_words=True
     # collatorでコケるのでpadding="max_length"で固定長化している
     enc = tokenizer(
@@ -172,10 +152,6 @@ def make_dataset(
         return_offsets_mapping=True,  # fast-only
     )
     # 単語-ラベルのアラインメント
-    label_batches = [
-        [label2id[t_l.label] for t_l in word_labels]
-        for word_labels in _word_labels_windows
-    ]
     word_ids_batches = [
         enc.word_ids(batch_index=i) for i, _ in enumerate(label_batches)
     ]
@@ -184,19 +160,38 @@ def make_dataset(
     _label_ids_list = _make_token_labels_from_word_token_map(
         _label_wids, label2id, id2label, label_all_tokens
     )
-
-    assert all(len(d.ids) == len(lbs) for d, lbs in zip(enc.encodings, _label_ids_list))
-
     enc["labels"] = _label_ids_list
+    assert all(len(d.ids) == len(lbs) for d, lbs in zip(enc.encodings, _label_ids_list))
+    return enc
 
+
+def make_features_from_batch(
+    batched_dataset: list[dict[str, list[list]]],
+    tokenizer,
+    id2label: dict[int, str],
+    label2id: dict[str, int],
+    max_length=128,
+    label_all_tokens=True,
+) -> list[dict[str, list]]:
+    batch_encodings = [
+        _process_batch(
+            batch,
+            tokenizer,
+            id2label,
+            label2id,
+            max_length,
+            label_all_tokens,
+        )
+        for batch in batched_dataset
+    ]
     return [
         {
-            "attention_mask": d.attention_mask,
-            "input_ids": d.ids,
-            "labels": d.labels,
+            "attention_mask": _enc.attention_mask,
+            "input_ids": _enc.ids,
+            "labels": _enc.labels,
         }
-        for d in enc.encodings
-        # for ams, ids, ls in zip(d["attention_mask"], d["input_ids"], d["labels"])  # unbatch
+        for enc in batch_encodings
+        for _enc in enc.encodings  # unbatch
     ]
 
 
@@ -234,21 +229,25 @@ class FastWordTokenizerWithAlignment(WordTokenizerWithAlignment):
 
 max_length: int = 128
 window_stride: int = 32
+batch_size: int = 32
 word_tokenizer = FastWordTokenizerWithAlignment(tokenizer)
 converter = Span2WordLabelConverter(word_tokenizer, max_length, window_stride)
 
-train_pth = os.path.join(workdir, "train.jsonl")
-valid_pth = os.path.join(workdir, "valid.jsonl")
-test_pth = os.path.join(workdir, "test.jsonl")
-train_dataset = make_dataset(
-    converter, train_pth, tokenizer, id2label, label2id, max_length
+# 単語単位のラベルアラインメント (span形式 -> conll03-like形式)
+# ※ sentencepieceベース手法の場合不要
+train_dataset = converter.convert_as_batch(
+    os.path.join(workdir, "train.jsonl"), batch_size
 )
-valid_dataset = make_dataset(
-    converter, valid_pth, tokenizer, id2label, label2id, max_length
+valid_dataset = converter.convert_as_batch(
+    os.path.join(workdir, "valid.jsonl"), batch_size
 )
-test_dataset = make_dataset(
-    converter, test_pth, tokenizer, id2label, label2id, max_length
+test_dataset = converter.convert_as_batch(
+    os.path.join(workdir, "test.jsonl"), batch_size
 )
+# 各単語内の、トークン単位のラベルアラインメント
+train_dataset = make_features_from_batch(train_dataset, tokenizer, id2label, label2id, max_length)
+valid_dataset = make_features_from_batch(valid_dataset, tokenizer, id2label, label2id, max_length)
+test_dataset = make_features_from_batch(test_dataset, tokenizer, id2label, label2id, max_length)
 
 
 # Build Trainer:
