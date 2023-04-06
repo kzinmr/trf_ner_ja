@@ -2,8 +2,6 @@ import json
 from abc import ABCMeta, abstractmethod
 from dataclasses import dataclass
 
-from transformers import AutoTokenizer
-
 from data import ChunkSpan, Token, TokenLabelPair
 
 
@@ -29,16 +27,6 @@ def make_batch(
             }
         )
     return batched_data
-
-@dataclass
-class DatasetPath:
-    model_checkpoint: str
-    whole: str | None = None
-    train: str | None = None
-    validation: str | None = None
-    test: str | None = None
-    validation_ratio: float | None = None
-    test_ratio: float | None = None
 
 
 class WordTokenizerWithAlignment(metaclass=ABCMeta):
@@ -204,7 +192,7 @@ class Span2WordLabelConverter:
         """トークン-ラベルペアのデータをConll2003-likeな形式で出力する."""
         sentences = []
         for token_labels in dataset:
-            sentence = "\n".join(delimiter.join((tok, lb)) for tok, lb in token_labels)
+            sentence = "\n".join(delimiter.join((tok_lb.token, tok_lb.label)) for tok_lb in token_labels)
             sentences.append(sentence)
         with open(filepath, "wt") as fp:
             _data = "\n\n".join(sentences)
