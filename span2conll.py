@@ -204,6 +204,7 @@ class Span2WordLabelConverter:
                 "labels": [t_l.label for t_l in token_labels],
             }
             for i, token_labels in enumerate(dataset)
+            if len(token_labels) > 0
         ]
 
     def convert_as_batch(
