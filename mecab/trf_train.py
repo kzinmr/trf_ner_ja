@@ -115,7 +115,7 @@ def _make_token_labels_from_word_token_map(
             previous_word_idx = word_idx
             previous_label = id2label[tag] if tag != -100 else None
         # 窓境界のI-xxx開始をOに倒す
-        if label_ids and id2label[label_ids[1]].startswith("I"):
+        if label_ids and label_ids[1] != -100 and id2label[label_ids[1]].startswith("I"):
             target_id = label_ids[1]
             replace_id = label2id["O"]
             for i in range(len(label_ids)):
