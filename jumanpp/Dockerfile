@@ -1,30 +1,27 @@
-ARG BASE_IMAGE=trf_ner_base
-FROM ${BASE_IMAGE} AS builder
+FROM trf_ner_base
 
 WORKDIR /app
 
-ARG JPP_VERSION=2.0.0-rc3
+# ARG JPP_VERSION=2.0.0-rc3
 
-RUN apt-get update && apt-get install -y \
-    gcc \
-    g++ \
-    make \
-    cmake \
-    libprotobuf-dev \
-    ca-certificates \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+# RUN apt-get update && apt-get install -y \
+#     gcc \
+#     g++ \
+#     make \
+#     cmake \
+#     libprotobuf-dev \
+#     ca-certificates \
+#     && apt-get clean \
+#     && rm -rf /var/lib/apt/lists/*
 
-RUN wget https://github.com/ku-nlp/jumanpp/releases/download/v${JPP_VERSION}/jumanpp-${JPP_VERSION}.tar.xz -qO - \
-    | tar Jxf - \
-    && cd jumanpp-${JPP_VERSION} \
-    && mkdir bld \
-    && cd bld \
-    && cmake .. -DCMAKE_BUILD_TYPE=Release \
-    && make -j $([ $(nproc) -le 8 ] && echo "$(nproc)" || echo "8") \
-    && make install
-
-FROM ${BASE_IMAGE} AS runner
+# RUN wget https://github.com/ku-nlp/jumanpp/releases/download/v${JPP_VERSION}/jumanpp-${JPP_VERSION}.tar.xz -qO - \
+#     | tar Jxf - \
+#     && cd jumanpp-${JPP_VERSION} \
+#     && mkdir bld \
+#     && cd bld \
+#     && cmake .. -DCMAKE_BUILD_TYPE=Release \
+#     && make -j $([ $(nproc) -le 8 ] && echo "$(nproc)" || echo "8") \
+#     && make install
 
 # Configure Japanese locale
 RUN apt-get update -q && apt-get install -yq \
@@ -36,8 +33,6 @@ ENV LANG="ja_JP.UTF-8" \
     LANGUAGE="en_US" \
     LC_ALL="ja_JP.UTF-8"
 RUN localedef -f UTF-8 -i ja_JP ja_JP.utf8
-
-COPY --from=builder /usr/local /usr/local
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
