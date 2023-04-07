@@ -1,10 +1,10 @@
 import os
+import pickle
+import random
 
 import evaluate
 import fugashi
 import numpy as np
-import pickle
-import random
 import spacy_alignments as tokenizations
 import torch
 from transformers import (
@@ -260,9 +260,15 @@ test_dataset = converter.convert_as_batch(
     os.path.join(workdir, "test.jsonl"), batch_size
 )
 # 各単語内の、トークン単位のラベルアラインメント
-train_dataset = make_features_from_batch(train_dataset, tokenizer, id2label, label2id, max_length)
-valid_dataset = make_features_from_batch(valid_dataset, tokenizer, id2label, label2id, max_length)
-test_dataset = make_features_from_batch(test_dataset, tokenizer, id2label, label2id, max_length)
+train_dataset = make_features_from_batch(
+    train_dataset, tokenizer, id2label, label2id, max_length
+)
+valid_dataset = make_features_from_batch(
+    valid_dataset, tokenizer, id2label, label2id, max_length
+)
+test_dataset = make_features_from_batch(
+    test_dataset, tokenizer, id2label, label2id, max_length
+)
 
 
 # Build Trainer:
@@ -304,6 +310,27 @@ trainer.train()
 
 trainer.evaluate()
 trainer.save_model(workdir)
+
+# metrics
+import numpy as np
+
+result = trainer.predict(test_dataset)
+preds_id = np.argmax(result.predictions, axis=2)
+
+true_ids = [d["labels"] for d in test_dataset]
+
+preds = []
+trues = []
+for ps, ts in zip(preds_id, true_ids):
+    preds.append([id2label[p] for p, t in zip(ps, ts) if t != -100])
+    trues.append([id2label[t] for p, t in zip(ps, ts) if t != -100])
+
+from seqeval.metrics import classification_report
+from seqeval.metrics import f1_score
+
+print(f1_score(trues, preds))
+
+print(classification_report(trues, preds))
 
 
 def pickle_bert_model(model_dir: str, model_out_path: str):
