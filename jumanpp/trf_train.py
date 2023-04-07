@@ -215,7 +215,7 @@ class JumanppWordTokenizerWithAlignment(WordTokenizerWithAlignment):
 max_length: int = 128
 window_stride: int = 32
 batch_size: int = 32
-word_tokenizer = JumanppWordTokenizerWithAlignment(tokenizer)
+word_tokenizer = JumanppWordTokenizerWithAlignment()
 converter = Span2WordLabelConverter(word_tokenizer, max_length, window_stride)
 
 # 単語単位のラベルアラインメント (span形式 -> conll03-like形式)
