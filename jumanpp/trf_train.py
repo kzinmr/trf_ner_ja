@@ -1,9 +1,10 @@
 import os
+import pickle
+import random
 
 import evaluate
 import numpy as np
-import pickle
-import random
+import rhoknp
 import torch
 from transformers import (
     AutoTokenizer,
@@ -185,52 +186,36 @@ def make_features_from_batch(
         for batch in batched_dataset
     ]
     return [
-        {
-            "attention_mask": _enc.attention_mask,
-            "input_ids": _enc.ids,
-            "labels": _enc.labels,
-        }
+        {"attention_mask": ams, "input_ids": ids, "labels": ls}
         for enc in batch_encodings
-        for _enc in enc.encodings  # unbatch
+        for ams, ids, ls in zip(
+            enc["attention_mask"], enc["input_ids"], enc["labels"]
+        )  # unbatch
     ]
 
 
-class FastWordTokenizerWithAlignment(WordTokenizerWithAlignment):
-    """FastTokenizerに含まれるWordTokenizerを利用する"""
-
-    def __init__(self, tokenizer):
-        self.tokenizer = tokenizer
-        assert self.tokenizer.is_fast
-
-    @staticmethod
-    def ordered_uniq(seq):
-        seen = set()
-        seen_add = seen.add
-        return [x for x in seq if x not in seen and not seen_add(x)]
+class JumanppWordTokenizerWithAlignment(WordTokenizerWithAlignment):
+    def __init__(self):
+        self.jumanpp = rhoknp.Jumanpp()
 
     def tokenize(self, text: str) -> list[str]:
-        batch_enc = self.tokenizer(text)
-        tokens = []
-        for w in batch_enc.word_ids():
-            if w is not None:
-                span = batch_enc.word_to_chars(w)
-                tokens.append(text[span.start : span.end])
-        return tokens
+        sentence = self.jumanpp.apply_to_sentence(text)
+        return [m.surf for m in sentence.morphemes]
 
     def tokenize_with_alignment(self, text: str) -> list[Token]:
-        batch_enc = self.tokenizer(text)
         tokens = []
-        for w in self.ordered_uniq(batch_enc.word_ids()):  # subword文はまとめる
-            if w is not None:
-                span = batch_enc.word_to_chars(w)
-                tokens.append(Token(text[span.start : span.end], span.start, span.end))
+        sentence = self.jumanpp.apply_to_sentence(text)
+        for morpheme in sentence.morphemes:
+            start, end = morpheme.span
+            tokens.append(Token(morpheme.surf, start, end))
+
         return tokens
 
 
 max_length: int = 128
 window_stride: int = 32
 batch_size: int = 32
-word_tokenizer = FastWordTokenizerWithAlignment(tokenizer)
+word_tokenizer = JumanppWordTokenizerWithAlignment(tokenizer)
 converter = Span2WordLabelConverter(word_tokenizer, max_length, window_stride)
 
 # 単語単位のラベルアラインメント (span形式 -> conll03-like形式)
@@ -245,9 +230,15 @@ test_dataset = converter.convert_as_batch(
     os.path.join(workdir, "test.jsonl"), batch_size
 )
 # 各単語内の、トークン単位のラベルアラインメント
-train_dataset = make_features_from_batch(train_dataset, tokenizer, id2label, label2id, max_length)
-valid_dataset = make_features_from_batch(valid_dataset, tokenizer, id2label, label2id, max_length)
-test_dataset = make_features_from_batch(test_dataset, tokenizer, id2label, label2id, max_length)
+train_dataset = make_features_from_batch(
+    train_dataset, tokenizer, id2label, label2id, max_length
+)
+valid_dataset = make_features_from_batch(
+    valid_dataset, tokenizer, id2label, label2id, max_length
+)
+test_dataset = make_features_from_batch(
+    test_dataset, tokenizer, id2label, label2id, max_length
+)
 
 
 # Build Trainer:
@@ -289,6 +280,27 @@ trainer.train()
 
 trainer.evaluate()
 trainer.save_model(workdir)
+
+# metrics
+import numpy as np
+
+result = trainer.predict(test_dataset)
+preds_id = np.argmax(result.predictions, axis=2)
+
+true_ids = [d["labels"] for d in test_dataset]
+
+preds = []
+trues = []
+for ps, ts in zip(preds_id, true_ids):
+    preds.append([id2label[p] for p, t in zip(ps, ts) if t != -100])
+    trues.append([id2label[t] for p, t in zip(ps, ts) if t != -100])
+
+from seqeval.metrics import classification_report
+from seqeval.metrics import f1_score
+
+print(f1_score(trues, preds))
+
+print(classification_report(trues, preds))
 
 
 def pickle_bert_model(model_dir: str, model_out_path: str):
