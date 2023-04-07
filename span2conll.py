@@ -1,6 +1,6 @@
 import json
 from abc import ABCMeta, abstractmethod
-
+from tqdm import tqdm
 from data import ChunkSpan, Token, TokenLabelPair
 
 
@@ -189,7 +189,7 @@ class Span2WordLabelConverter:
             ]
         dataset = [
             token_label
-            for text, spans in text_spans
+            for text, spans in tqdm(text_spans)
             for token_label in self._convert(text, spans)
         ]
 

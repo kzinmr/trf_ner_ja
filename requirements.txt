@@ -3,3 +3,4 @@ evaluate
 tokenizers
 seqeval
 regex
+tqdm
